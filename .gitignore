@@ -1,0 +1,23 @@
+# Environments
+.env
+.env.*
+
+# Go & Hot Reloading
+bin/
+tmp/
+*.out
+engine/engine
+
+# Mac OS
+.DS_Store
+
+# IDEs
+.vscode/
+.idea/
+
+# Database (in case you ever bind-mount to a local folder)
+pgdata/
+postgres_data/
+
+# Additional
+roadmaps/
