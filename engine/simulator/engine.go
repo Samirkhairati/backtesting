@@ -4,30 +4,43 @@ import (
 	"time"
 
 	"github.com/samirkhairati/backtesting/engine/data"
+	"github.com/samirkhairati/backtesting/engine/portfolio"
 	"github.com/samirkhairati/backtesting/engine/strategy"
 )
 
 type Engine struct {
 	CurrentTime time.Time
+	Portfolio   *portfolio.Portfolio
 
 	iterator data.BarIterator
 	strategy strategy.Strategy
 }
 
 func NewEngine(iter data.BarIterator, strat strategy.Strategy) *Engine {
+	// Start with $100,000 in cash by default
+	pf := portfolio.New()
+	pf.Deposit(100000)
+
 	return &Engine{
-		iterator: iter,
-		strategy: strat,
+		Portfolio: pf,
+		iterator:  iter,
+		strategy:  strat,
 	}
 }
 
 func (e *Engine) Run() error {
 	for e.iterator.Next() {
 		bar := e.iterator.Bar()
-
 		e.CurrentTime = bar.Timestamp
 
+		// 1. Update portfolio with latest market data
+		e.Portfolio.UpdateMarketPrice(bar.Symbol, bar.Close)
+
+		// 2. Execute strategy
 		e.strategy.OnBar(bar)
+
+		// 3. Record end-of-day equity
+		e.Portfolio.RecordEquity(bar.Timestamp)
 	}
 
 	return e.iterator.Err()
