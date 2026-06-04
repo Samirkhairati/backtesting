@@ -6,14 +6,13 @@ import (
 )
 
 var (
-	ErrNegativePrice   = errors.New("dataset contains negative prices")
-	ErrZeroVolume      = errors.New("dataset contains negative volume") // volume can be zero on non-trading days/halts sometimes, but negative is invalid. We will check negative.
-	ErrMissingTime     = errors.New("dataset contains zero timestamp")
-	ErrDuplicateTime   = errors.New("dataset contains duplicate timestamps")
-	ErrOutOfOrderTime  = errors.New("dataset is out of order")
+	ErrNegativePrice  = errors.New("dataset contains negative prices")
+	ErrZeroVolume     = errors.New("dataset contains negative volume")
+	ErrMissingTime    = errors.New("dataset contains zero timestamp")
+	ErrDuplicateTime  = errors.New("dataset contains duplicate timestamps")
+	ErrOutOfOrderTime = errors.New("dataset is out of order")
 )
 
-// ValidateBarDataset ensures a slice of bars conforms to all requirements.
 func ValidateBarDataset(bars []Bar) error {
 	if len(bars) == 0 {
 		return nil

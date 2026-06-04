@@ -9,21 +9,18 @@ import (
 	"github.com/samirkhairati/backtesting/engine/data/store"
 )
 
-// ensure postgresStore implements store.Store
 var _ store.Store = (*postgresStore)(nil)
 
 type postgresStore struct {
 	db *pgxpool.Pool
 }
 
-// NewStore creates a new PostgreSQL backed historical data store.
 func NewStore(db *pgxpool.Pool) store.Store {
 	return &postgresStore{db: db}
 }
 
-// GetBars retrieves bars for a given symbol, returning an iterator.
 func (p *postgresStore) GetBars(ctx context.Context, symbol string) (data.BarIterator, error) {
-	// Query rows ordered by timestamp ASC to ensure chronological replay
+
 	query := `
 		SELECT symbol, timestamp, open, high, low, close, volume 
 		FROM daily_bars 
@@ -38,7 +35,6 @@ func (p *postgresStore) GetBars(ctx context.Context, symbol string) (data.BarIte
 	return &postgresIterator{rows: rows}, nil
 }
 
-// postgresIterator implements data.BarIterator
 type postgresIterator struct {
 	rows pgx.Rows
 	err  error
@@ -49,7 +45,7 @@ func (i *postgresIterator) Next() bool {
 	if i.err != nil {
 		return false
 	}
-	
+
 	if i.rows.Next() {
 		err := i.rows.Scan(
 			&i.bar.Symbol,
@@ -66,7 +62,7 @@ func (i *postgresIterator) Next() bool {
 		}
 		return true
 	}
-	
+
 	if err := i.rows.Err(); err != nil {
 		i.err = err
 	}

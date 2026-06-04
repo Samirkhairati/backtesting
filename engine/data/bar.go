@@ -2,7 +2,6 @@ package data
 
 import "time"
 
-// Bar represents a single period of market data.
 type Bar struct {
 	Symbol    string
 	Timestamp time.Time

@@ -8,7 +8,6 @@ import (
 	"github.com/samirkhairati/backtesting/engine/simulator"
 )
 
-// mockIterator is a simple slice-backed iterator for testing.
 type mockIterator struct {
 	bars []data.Bar
 	idx  int
@@ -30,7 +29,6 @@ func (m *mockIterator) Err() error {
 	return nil
 }
 
-// mockStrategy simply records the bars it receives to verify they were passed correctly.
 type mockStrategy struct {
 	receivedBars []data.Bar
 }
@@ -40,7 +38,7 @@ func (s *mockStrategy) OnBar(bar data.Bar) {
 }
 
 func TestEngine_Run(t *testing.T) {
-	// Setup test data
+
 	t1 := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
 	t2 := time.Date(2023, 1, 2, 0, 0, 0, 0, time.UTC)
 
@@ -54,13 +52,11 @@ func TestEngine_Run(t *testing.T) {
 
 	engine := simulator.NewEngine(iterator, strat)
 
-	// Execute simulation
 	err := engine.Run()
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 
-	// Verify strategy received all bars sequentially
 	if len(strat.receivedBars) != 2 {
 		t.Fatalf("Expected strategy to receive 2 bars, got %d", len(strat.receivedBars))
 	}
@@ -69,7 +65,6 @@ func TestEngine_Run(t *testing.T) {
 		t.Errorf("Bars were not received in the correct chronological order")
 	}
 
-	// Verify the simulated clock was advanced to the timestamp of the final bar
 	if engine.CurrentTime != t2 {
 		t.Errorf("Expected engine clock to be %v, got %v", t2, engine.CurrentTime)
 	}
