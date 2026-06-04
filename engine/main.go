@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/samirkhairati/backtesting/engine/data"
 	"github.com/samirkhairati/backtesting/engine/data/store/postgres"
+	"github.com/samirkhairati/backtesting/engine/simulator"
 )
 
 func main() {
@@ -59,33 +60,32 @@ func main() {
 		log.Fatalf("Failed to get bars for %s: %v", symbol, err)
 	}
 
-	var bars []data.Bar
-	count := 0
+	// Instantiate our dummy strategy
+	strat := &PrintingStrategy{}
 
-	// Iterate through the bars (simulating the sequential market replay engine)
-	for iter.Next() {
-		bar := iter.Bar()
-		bars = append(bars, bar)
-		count++
-		
-		// Print the first few bars as a sanity check
-		if count <= 3 {
-			log.Printf("Bar %d: %s [%v] O:%.2f H:%.2f L:%.2f C:%.2f V:%d", 
-				count, bar.Symbol, bar.Timestamp.Format("2006-01-02"), 
-				bar.Open, bar.High, bar.Low, bar.Close, bar.Volume)
-		}
+	// Initialize the Market Replay Engine
+	simEngine := simulator.NewEngine(iter, strat)
+
+	log.Println("Starting Market Replay Simulation...")
+	if err := simEngine.Run(); err != nil {
+		log.Fatalf("Simulation encountered an error: %v", err)
 	}
+
+	log.Printf("Simulation finished! Processed %d bars. Final simulated clock: %v", strat.count, simEngine.CurrentTime.Format("2006-01-02"))
+}
+
+// PrintingStrategy is a dummy strategy to verify the replay engine works.
+type PrintingStrategy struct {
+	count int
+}
+
+func (s *PrintingStrategy) OnBar(bar data.Bar) {
+	s.count++
 	
-	if err := iter.Err(); err != nil {
-		log.Fatalf("Error during iteration: %v", err)
+	// Print the first few bars as a sanity check
+	if s.count <= 3 {
+		log.Printf("[Strategy] Received Bar %d: %s [%v] O:%.2f H:%.2f L:%.2f C:%.2f V:%d", 
+			s.count, bar.Symbol, bar.Timestamp.Format("2006-01-02"), 
+			bar.Open, bar.High, bar.Low, bar.Close, bar.Volume)
 	}
-
-	log.Printf("Successfully loaded %d bars for %s", count, symbol)
-
-	// Validate the loaded dataset to ensure it meets our strict criteria
-	if err := data.ValidateBarDataset(bars); err != nil {
-		log.Fatalf("Dataset validation failed for %s: %v", symbol, err)
-	}
-	
-	log.Println("Historical data validated successfully!")
 }
