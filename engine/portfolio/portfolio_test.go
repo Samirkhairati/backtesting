@@ -136,3 +136,82 @@ func TestAddPositionAveraging(t *testing.T) {
 		t.Errorf("Expected cash to be 115000, got %f", pf.Cash)
 	}
 }
+
+func TestShortSellingPnL(t *testing.T) {
+	pf := portfolio.New()
+	pf.Deposit(100000)
+
+	// Short 100 shares at $150
+	err := pf.AddPosition("AAPL", -100, 150, time.Now())
+	if err != nil {
+		t.Fatalf("Failed to open short: %v", err)
+	}
+
+	// Cash should be 100,000 + 15,000 = 115,000
+	if pf.Cash != 115000 {
+		t.Errorf("Expected cash 115000, got %f", pf.Cash)
+	}
+
+	// Market drops to $100
+	pf.UpdateMarketPrice("AAPL", 100)
+	// TotalValue = Cash (115000) + (-100 * 100) = 115000 - 10000 = 105000
+	if pf.TotalValue() != 105000 {
+		t.Errorf("Expected TotalValue 105000, got %f", pf.TotalValue())
+	}
+
+	// Buy to cover at $100
+	err = pf.AddPosition("AAPL", 100, 100, time.Now())
+	if err != nil {
+		t.Fatalf("Failed to cover short: %v", err)
+	}
+
+	// Cash should be 115,000 - 10,000 = 105,000
+	if pf.Cash != 105000 {
+		t.Errorf("Expected cash 105000, got %f", pf.Cash)
+	}
+
+	// Check PnL on the closed trade
+	if len(pf.ClosedTrades) != 1 {
+		t.Fatalf("Expected 1 closed trade, got %d", len(pf.ClosedTrades))
+	}
+	
+	tr := pf.ClosedTrades[0]
+	if tr.PnL != 5000 { // (150 - 100) * 100
+		t.Errorf("Expected PnL 5000, got %f", tr.PnL)
+	}
+}
+
+func TestShortSellingMargin(t *testing.T) {
+	pf := portfolio.New()
+	pf.Deposit(1000) // Small account
+
+	// Try to short $15,000 worth of AAPL, which exceeds TotalValue
+	err := pf.AddPosition("AAPL", -100, 150, time.Now())
+	if err != portfolio.ErrInsufficientMargin {
+		t.Fatalf("Expected ErrInsufficientMargin, got %v", err)
+	}
+	
+	// Try to short $500 worth of AAPL, which should succeed
+	err = pf.AddPosition("AAPL", -5, 100, time.Now())
+	if err != nil {
+		t.Fatalf("Failed to open valid short: %v", err)
+	}
+}
+
+func TestCloseShortPosition(t *testing.T) {
+	pf := portfolio.New()
+	pf.Deposit(100000)
+
+	pf.AddPosition("AAPL", -100, 150, time.Now())
+	pos, exists := pf.Positions["AAPL"]
+	if !exists || pos.Quantity != -100 {
+		t.Fatalf("Expected short position of -100")
+	}
+
+	// Close the short position by buying 100
+	pf.AddPosition("AAPL", 100, 140, time.Now())
+	if _, exists := pf.Positions["AAPL"]; exists {
+		t.Fatalf("Position should be removed after covering")
+	}
+}
+

@@ -101,7 +101,7 @@ func (m *OrderManager) ExecutePendingOrders(bar data.Bar) {
 		err := m.portfolio.AddPosition(order.Symbol, order.Quantity, bar.Open, bar.Timestamp)
 		
 		if err != nil {
-			// e.g. ErrInsufficientCash
+			// e.g. ErrInsufficientCash or ErrInsufficientMargin
 			order.Status = OrderStatusRejected
 			log.Printf("[Broker] Order REJECTED: %s %f shares @ $%.2f (Reason: %v)", order.Symbol, order.Quantity, bar.Open, err)
 			// Order is dropped from queue (not appended to remainingOrders)

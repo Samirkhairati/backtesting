@@ -2,11 +2,13 @@ package portfolio
 
 import (
 	"errors"
+	"math"
 	"time"
 )
 
 var (
-	ErrInsufficientCash = errors.New("insufficient cash")
+	ErrInsufficientCash   = errors.New("insufficient cash")
+	ErrInsufficientMargin = errors.New("insufficient margin")
 )
 
 // Position represents an open holding of a specific symbol.
@@ -86,13 +88,18 @@ func (p *Portfolio) RecordEquity(timestamp time.Time) {
 }
 
 // AddPosition is a low-level accounting hook used by the execution engine to adjust shares and cash.
-// It matches sell orders against open tax lots using a FIFO queue to record Trades.
+// It symmetrically matches buy/sell orders against open tax lots using a FIFO queue to record Trades.
 func (p *Portfolio) AddPosition(symbol string, quantity float64, price float64, timestamp time.Time) error {
 	cost := quantity * price
 
-	// If buying, check cash first
+	// If buying, check cash
 	if quantity > 0 && p.Cash < cost {
 		return ErrInsufficientCash
+	}
+	
+	// If shorting, check margin (short exposure shouldn't exceed TotalValue)
+	if quantity < 0 && -cost > p.TotalValue() {
+		return ErrInsufficientMargin
 	}
 
 	p.Cash -= cost
@@ -103,65 +110,66 @@ func (p *Portfolio) AddPosition(symbol string, quantity float64, price float64, 
 	}
 
 	queue := p.OpenLots[symbol]
+	remainingQty := quantity
 
-	if quantity > 0 {
-		// Long trade: Push a new Lot
+	// Match against open lots of the opposite sign
+	for remainingQty != 0 && !queue.IsEmpty() {
+		lot := queue.PeekFront()
+		if lot == nil {
+			break
+		}
+
+		// If same sign, we don't match, we just append to position
+		if (remainingQty > 0 && lot.Quantity > 0) || (remainingQty < 0 && lot.Quantity < 0) {
+			break
+		}
+
+		// Opposite signs, we can match and close out the lot
+		matchQty := math.Min(math.Abs(remainingQty), math.Abs(lot.Quantity))
+
+		var pnl float64
+		var returnPct float64
+
+		if remainingQty < 0 {
+			// Selling to close a Long
+			pnl = (price - lot.Price) * matchQty
+			returnPct = ((price - lot.Price) / lot.Price) * 100.0
+			
+			remainingQty += matchQty // selling removes positive quantity
+			lot.Quantity -= matchQty
+		} else {
+			// Buying to close a Short
+			pnl = (lot.Price - price) * matchQty
+			returnPct = ((lot.Price - price) / lot.Price) * 100.0
+			
+			remainingQty -= matchQty // buying removes negative quantity
+			lot.Quantity += matchQty
+		}
+
+		if lot.Quantity == 0 {
+			queue.PopFront()
+		}
+
+		p.ClosedTrades = append(p.ClosedTrades, Trade{
+			Symbol:     symbol,
+			EntryTime:  lot.Timestamp,
+			ExitTime:   timestamp,
+			EntryPrice: lot.Price,
+			ExitPrice:  price,
+			Quantity:   matchQty,
+			PnL:        pnl,
+			ReturnPct:  returnPct,
+		})
+	}
+
+	// If there's still quantity left, push it as a new lot
+	if remainingQty != 0 {
 		queue.Push(Lot{
 			Symbol:    symbol,
-			Quantity:  quantity,
+			Quantity:  remainingQty,
 			Price:     price,
 			Timestamp: timestamp,
 		})
-	} else if quantity < 0 {
-		// Short trade or closing a Long: Match against open Lots
-		sellQuantity := -quantity
-
-		for sellQuantity > 0 && !queue.IsEmpty() {
-			lot := queue.PeekFront()
-			if lot == nil {
-				break
-			}
-
-			var filledQty float64
-			if lot.Quantity <= sellQuantity {
-				// We consume this entire lot
-				filledQty = lot.Quantity
-				sellQuantity -= filledQty
-				queue.PopFront()
-			} else {
-				// We consume a portion of this lot
-				filledQty = sellQuantity
-				lot.Quantity -= filledQty
-				sellQuantity = 0
-			}
-
-			// Record the closed trade
-			pnl := (price - lot.Price) * filledQty
-			returnPct := ((price - lot.Price) / lot.Price) * 100.0
-
-			p.ClosedTrades = append(p.ClosedTrades, Trade{
-				Symbol:     symbol,
-				EntryTime:  lot.Timestamp,
-				ExitTime:   timestamp,
-				EntryPrice: lot.Price,
-				ExitPrice:  price,
-				Quantity:   filledQty,
-				PnL:        pnl,
-				ReturnPct:  returnPct,
-			})
-		}
-		
-		if sellQuantity > 0 {
-			// We sold more than we had open (Shorting).
-			// We push a short lot. For this engine, we mostly do Long only, 
-			// but we handle it just in case.
-			queue.Push(Lot{
-				Symbol:    symbol,
-				Quantity:  -sellQuantity, // negative quantity denotes a short lot
-				Price:     price,
-				Timestamp: timestamp,
-			})
-		}
 	}
 
 	// Update the aggregated Position view
@@ -175,17 +183,21 @@ func (p *Portfolio) AddPosition(symbol string, quantity float64, price float64, 
 		return nil
 	}
 
-	// Calculate new average price (simplified; a true average requires full lot traversal,
-	// but this maintains our legacy average cost implementation for TotalValue).
-	totalCost := (pos.Quantity * pos.AveragePrice) + cost
+	// Average cost calculation (only for increasing position size, 
+	// decreasing size doesn't change average cost basis of remaining shares)
 	newQuantity := pos.Quantity + quantity
-
 	if newQuantity == 0 {
 		delete(p.Positions, symbol)
 		return nil
 	}
 
+	// If the position is growing in its current direction, recalculate average cost
+	if (pos.Quantity > 0 && quantity > 0) || (pos.Quantity < 0 && quantity < 0) {
+		totalCost := (math.Abs(pos.Quantity) * pos.AveragePrice) + (math.Abs(quantity) * price)
+		pos.AveragePrice = totalCost / math.Abs(newQuantity)
+	}
+
 	pos.Quantity = newQuantity
-	pos.AveragePrice = totalCost / newQuantity
 	return nil
 }
+
