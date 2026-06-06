@@ -10,20 +10,28 @@ import (
 )
 
 type mockIterator struct {
-	bars []data.Bar
+	data []map[string]data.Bar
 	idx  int
 }
 
 func (m *mockIterator) Next() bool {
-	if m.idx >= len(m.bars) {
+	if m.idx >= len(m.data) {
 		return false
 	}
 	m.idx++
 	return true
 }
 
-func (m *mockIterator) Bar() data.Bar {
-	return m.bars[m.idx-1]
+func (m *mockIterator) Bars() map[string]data.Bar {
+	return m.data[m.idx-1]
+}
+
+func (m *mockIterator) Timestamp() time.Time {
+	// pick any bar's timestamp, they should all be identical
+	for _, b := range m.data[m.idx-1] {
+		return b.Timestamp
+	}
+	return time.Time{}
 }
 
 func (m *mockIterator) Err() error {
@@ -31,11 +39,11 @@ func (m *mockIterator) Err() error {
 }
 
 type mockStrategy struct {
-	receivedBars []data.Bar
+	receivedBars []map[string]data.Bar
 }
 
-func (s *mockStrategy) OnBar(b broker.Broker, bar data.Bar) {
-	s.receivedBars = append(s.receivedBars, bar)
+func (s *mockStrategy) OnBars(b broker.Broker, bars map[string]data.Bar) {
+	s.receivedBars = append(s.receivedBars, bars)
 }
 
 func TestEngine_Run(t *testing.T) {
@@ -43,12 +51,18 @@ func TestEngine_Run(t *testing.T) {
 	t1 := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
 	t2 := time.Date(2023, 1, 2, 0, 0, 0, 0, time.UTC)
 
-	bars := []data.Bar{
-		{Symbol: "AAPL", Timestamp: t1, Close: 150.0},
-		{Symbol: "AAPL", Timestamp: t2, Close: 152.0},
+	data := []map[string]data.Bar{
+		{
+			"AAPL": {Symbol: "AAPL", Timestamp: t1, Close: 150.0},
+			"MSFT": {Symbol: "MSFT", Timestamp: t1, Close: 250.0},
+		},
+		{
+			"AAPL": {Symbol: "AAPL", Timestamp: t2, Close: 152.0},
+			"MSFT": {Symbol: "MSFT", Timestamp: t2, Close: 248.0},
+		},
 	}
 
-	iterator := &mockIterator{bars: bars}
+	iterator := &mockIterator{data: data}
 	strat := &mockStrategy{}
 
 	engine := simulator.NewEngine(iterator, strat)
@@ -59,10 +73,10 @@ func TestEngine_Run(t *testing.T) {
 	}
 
 	if len(strat.receivedBars) != 2 {
-		t.Fatalf("Expected strategy to receive 2 bars, got %d", len(strat.receivedBars))
+		t.Fatalf("Expected strategy to receive 2 iterations, got %d", len(strat.receivedBars))
 	}
 
-	if strat.receivedBars[0].Timestamp != t1 || strat.receivedBars[1].Timestamp != t2 {
+	if strat.receivedBars[0]["AAPL"].Timestamp != t1 || strat.receivedBars[1]["AAPL"].Timestamp != t2 {
 		t.Errorf("Bars were not received in the correct chronological order")
 	}
 
@@ -70,3 +84,4 @@ func TestEngine_Run(t *testing.T) {
 		t.Errorf("Expected engine clock to be %v, got %v", t2, engine.CurrentTime)
 	}
 }
+
