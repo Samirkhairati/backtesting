@@ -39,7 +39,7 @@ func TestClosePosition(t *testing.T) {
 	pf := portfolio.New()
 	pf.Deposit(100000)
 	// Force a raw position into the portfolio
-	pf.AddPosition("MSFT", 25, 200)
+	pf.AddPosition("MSFT", 25, 200, time.Now())
 
 	bm := broker.NewOrderManager(pf)
 	bm.SetTime(time.Now())
@@ -72,7 +72,7 @@ func TestClosePosition(t *testing.T) {
 func TestGetPositionImmutability(t *testing.T) {
 	pf := portfolio.New()
 	pf.Deposit(10000)
-	pf.AddPosition("AMD", 10, 100)
+	pf.AddPosition("AMD", 10, 100, time.Now())
 
 	bm := broker.NewOrderManager(pf)
 

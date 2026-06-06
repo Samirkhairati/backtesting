@@ -28,6 +28,8 @@ type Portfolio struct {
 	Positions     map[string]*Position
 	CurrentPrices map[string]float64
 	EquityCurve   []EquityPoint
+	ClosedTrades  []Trade
+	OpenLots      map[string]*LotQueue
 }
 
 // New creates and initializes a new Portfolio.
@@ -37,6 +39,8 @@ func New() *Portfolio {
 		Positions:     make(map[string]*Position),
 		CurrentPrices: make(map[string]float64),
 		EquityCurve:   make([]EquityPoint, 0),
+		ClosedTrades:  make([]Trade, 0),
+		OpenLots:      make(map[string]*LotQueue),
 	}
 }
 
@@ -82,17 +86,85 @@ func (p *Portfolio) RecordEquity(timestamp time.Time) {
 }
 
 // AddPosition is a low-level accounting hook used by the execution engine to adjust shares and cash.
-// To avoid phantom profits, purchasing shares immediately deducts the exact required cash.
-func (p *Portfolio) AddPosition(symbol string, quantity float64, price float64) error {
+// It matches sell orders against open tax lots using a FIFO queue to record Trades.
+func (p *Portfolio) AddPosition(symbol string, quantity float64, price float64, timestamp time.Time) error {
 	cost := quantity * price
 
-	// If buying (positive quantity), check cash first
+	// If buying, check cash first
 	if quantity > 0 && p.Cash < cost {
 		return ErrInsufficientCash
 	}
 
 	p.Cash -= cost
 
+	// Ensure LotQueue exists
+	if p.OpenLots[symbol] == nil {
+		p.OpenLots[symbol] = &LotQueue{}
+	}
+
+	queue := p.OpenLots[symbol]
+
+	if quantity > 0 {
+		// Long trade: Push a new Lot
+		queue.Push(Lot{
+			Symbol:    symbol,
+			Quantity:  quantity,
+			Price:     price,
+			Timestamp: timestamp,
+		})
+	} else if quantity < 0 {
+		// Short trade or closing a Long: Match against open Lots
+		sellQuantity := -quantity
+
+		for sellQuantity > 0 && !queue.IsEmpty() {
+			lot := queue.PeekFront()
+			if lot == nil {
+				break
+			}
+
+			var filledQty float64
+			if lot.Quantity <= sellQuantity {
+				// We consume this entire lot
+				filledQty = lot.Quantity
+				sellQuantity -= filledQty
+				queue.PopFront()
+			} else {
+				// We consume a portion of this lot
+				filledQty = sellQuantity
+				lot.Quantity -= filledQty
+				sellQuantity = 0
+			}
+
+			// Record the closed trade
+			pnl := (price - lot.Price) * filledQty
+			returnPct := ((price - lot.Price) / lot.Price) * 100.0
+
+			p.ClosedTrades = append(p.ClosedTrades, Trade{
+				Symbol:     symbol,
+				EntryTime:  lot.Timestamp,
+				ExitTime:   timestamp,
+				EntryPrice: lot.Price,
+				ExitPrice:  price,
+				Quantity:   filledQty,
+				PnL:        pnl,
+				ReturnPct:  returnPct,
+			})
+		}
+		
+		if sellQuantity > 0 {
+			// We sold more than we had open (Shorting).
+			// We push a short lot. For this engine, we mostly do Long only, 
+			// but we handle it just in case.
+			queue.Push(Lot{
+				Symbol:    symbol,
+				Quantity:  -sellQuantity, // negative quantity denotes a short lot
+				Price:     price,
+				Timestamp: timestamp,
+			})
+		}
+	}
+
+	// Update the aggregated Position view
 	pos, exists := p.Positions[symbol]
 	if !exists {
 		p.Positions[symbol] = &Position{
@@ -103,7 +175,8 @@ func (p *Portfolio) AddPosition(symbol string, quantity float64, price float64) 
 		return nil
 	}
 
-	// Update average price based on the new combined quantity
+	// Calculate new average price (simplified; a true average requires full lot traversal,
+	// but this maintains our legacy average cost implementation for TotalValue).
 	totalCost := (pos.Quantity * pos.AveragePrice) + cost
 	newQuantity := pos.Quantity + quantity
 

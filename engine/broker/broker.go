@@ -98,7 +98,7 @@ func (m *OrderManager) ExecutePendingOrders(bar data.Bar) {
 		}
 
 		// Attempt to fill the order using today's OPEN price
-		err := m.portfolio.AddPosition(order.Symbol, order.Quantity, bar.Open)
+		err := m.portfolio.AddPosition(order.Symbol, order.Quantity, bar.Open, bar.Timestamp)
 		
 		if err != nil {
 			// e.g. ErrInsufficientCash

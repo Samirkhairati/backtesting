@@ -29,12 +29,32 @@ func TestPortfolioCash(t *testing.T) {
 	}
 }
 
+func TestInsufficientCash(t *testing.T) {
+	pf := portfolio.New()
+	pf.Deposit(20000)
+
+	err := pf.AddPosition("AAPL", 100, 100, time.Now())
+	if err != nil {
+		t.Fatalf("Unexpected error adding position: %v", err)
+	}
+
+	if pf.Cash != 10000 {
+		t.Errorf("Expected cash to be 10000 after purchase, got %f", pf.Cash)
+	}
+
+	// Attempt to buy more than cash allows
+	err = pf.AddPosition("AAPL", 200, 100, time.Now())
+	if err != portfolio.ErrInsufficientCash {
+		t.Errorf("Expected ErrInsufficientCash, got %v", err)
+	}
+}
+
 func TestPortfolioMarketValue(t *testing.T) {
 	pf := portfolio.New()
 	pf.Deposit(100000)
 
 	// Buy 100 shares of AAPL at $100
-	err := pf.AddPosition("AAPL", 100, 100)
+	err := pf.AddPosition("AAPL", 100, 100, time.Now())
 	if err != nil {
 		t.Fatalf("Failed to add position: %v", err)
 	}
@@ -65,7 +85,7 @@ func TestPortfolioEquityCurve(t *testing.T) {
 
 	// Day 1
 	ts1 := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
-	pf.AddPosition("AAPL", 100, 150) // Cash = 85000
+	pf.AddPosition("AAPL", 100, 150, ts1) // Cash = 85000
 	pf.UpdateMarketPrice("AAPL", 150)
 	pf.RecordEquity(ts1)
 
@@ -90,8 +110,8 @@ func TestAddPositionAveraging(t *testing.T) {
 	pf := portfolio.New()
 	pf.Deposit(100000)
 
-	pf.AddPosition("AAPL", 100, 100) // 100 shares @ $100
-	pf.AddPosition("AAPL", 100, 150) // 100 shares @ $150
+	pf.AddPosition("AAPL", 100, 100, time.Now()) // 100 shares @ $100
+	pf.AddPosition("AAPL", 100, 150, time.Now()) // 100 shares @ $150
 
 	pos := pf.Positions["AAPL"]
 	if pos.Quantity != 200 {
@@ -102,7 +122,7 @@ func TestAddPositionAveraging(t *testing.T) {
 	}
 
 	// Sell all shares
-	pf.AddPosition("AAPL", -200, 200) // Sell 200 shares @ $200
+	pf.AddPosition("AAPL", -200, 200, time.Now()) // Sell 200 shares @ $200
 
 	if _, exists := pf.Positions["AAPL"]; exists {
 		t.Errorf("Position should be removed after selling all shares")

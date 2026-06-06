@@ -6,6 +6,7 @@ import (
 
 	"github.com/samirkhairati/backtesting/engine/data/store/postgres"
 	"github.com/samirkhairati/backtesting/engine/db"
+	"github.com/samirkhairati/backtesting/engine/metrics"
 	"github.com/samirkhairati/backtesting/engine/simulator"
 	"github.com/samirkhairati/backtesting/engine/strategy"
 )
@@ -29,12 +30,11 @@ func main() {
 		"Bollinger Bands":       strategy.NewBollingerBandsStrategy(),
 	}
 
-	results := make(map[string]float64)
+	results := make(map[string]*metrics.PerformanceReport)
 
 	for name, strat := range strategies {
 		log.Printf("\n--- Running Strategy: %s ---", name)
 		
-		// Fetch fresh iterator for each run
 		iter, err := store.GetBars(ctx, symbol)
 		if err != nil {
 			log.Fatalf("Failed to get bars for %s: %v", symbol, err)
@@ -46,14 +46,13 @@ func main() {
 			log.Fatalf("Simulation encountered an error on %s: %v", name, err)
 		}
 		
-		results[name] = simEngine.Portfolio.TotalValue()
+		results[name] = metrics.GenerateReport(simEngine.Portfolio)
 	}
 
-	log.Println("\n======================================")
+	log.Println("\n\n======================================")
 	log.Println("       FINAL SIMULATION RESULTS       ")
 	log.Println("======================================")
-	for name, val := range results {
-		profit := ((val - 100000.0) / 100000.0) * 100.0
-		log.Printf("%-25s: $%-10.2f (%+5.2f%%)", name, val, profit)
+	for name, report := range results {
+		log.Printf("\n>>> STRATEGY: %s <<<\n%s", name, report.String())
 	}
 }
