@@ -37,13 +37,16 @@ func (e *Engine) Run() error {
 		e.CurrentTime = bar.Timestamp
 		e.OrderManager.SetTime(bar.Timestamp)
 
-		// 1. Update portfolio with latest market data
+		// 1. EXECUTE orders from yesterday using TODAY'S OPEN price
+		e.OrderManager.ExecutePendingOrders(bar)
+
+		// 2. Update portfolio with TODAY'S CLOSE price
 		e.Portfolio.UpdateMarketPrice(bar.Symbol, bar.Close)
 
-		// 2. Execute strategy, handing it the broker connection
+		// 3. Let strategy evaluate TODAY'S CLOSE and submit new orders for tomorrow
 		e.strategy.OnBar(e.OrderManager, bar)
 
-		// 3. Record end-of-day equity
+		// 4. Snapshot equity
 		e.Portfolio.RecordEquity(bar.Timestamp)
 	}
 

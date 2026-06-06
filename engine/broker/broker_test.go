@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/samirkhairati/backtesting/engine/broker"
+	"github.com/samirkhairati/backtesting/engine/data"
 	"github.com/samirkhairati/backtesting/engine/portfolio"
 )
 
@@ -87,5 +88,66 @@ func TestGetPositionImmutability(t *testing.T) {
 	truePos := pf.Positions["AMD"]
 	if truePos.Quantity != 10 {
 		t.Errorf("SECURITY BREACH: Strategy successfully mutated the real portfolio state. Expected 10, got %f", truePos.Quantity)
+	}
+}
+
+func TestExecutionEngine(t *testing.T) {
+	pf := portfolio.New()
+	pf.Deposit(1000)
+
+	bm := broker.NewOrderManager(pf)
+	bm.SetTime(time.Now())
+
+	// Submit 2 orders: one valid, one that will be rejected due to insufficient cash
+	bm.SubmitOrder("AAPL", 5) // Should cost ~ $750 if Open is $150
+	bm.SubmitOrder("TSLA", 10) // Should cost ~$2000, will fail
+
+	if len(bm.PendingOrders) != 2 {
+		t.Fatalf("Expected 2 pending orders")
+	}
+
+	bar1 := data.Bar{
+		Symbol: "AAPL",
+		Open:   150.0,
+		Close:  155.0,
+	}
+
+	// Execution should process the AAPL order, and IGNORE the TSLA order (different symbol)
+	bm.ExecutePendingOrders(bar1)
+
+	if len(bm.PendingOrders) != 1 {
+		t.Fatalf("Expected 1 pending order left (TSLA), got %d", len(bm.PendingOrders))
+	}
+
+	// Verify AAPL was filled
+	if len(bm.Fills) != 1 {
+		t.Fatalf("Expected 1 fill event, got %d", len(bm.Fills))
+	}
+	if bm.Fills[0].Symbol != "AAPL" || bm.Fills[0].Price != 150.0 {
+		t.Errorf("Fill event incorrect: %+v", bm.Fills[0])
+	}
+	if pf.Cash != 250.0 { // 1000 - (5 * 150)
+		t.Errorf("Expected cash to be 250, got %f", pf.Cash)
+	}
+
+	// Now send TSLA bar
+	bar2 := data.Bar{
+		Symbol: "TSLA",
+		Open:   200.0,
+	}
+
+	// Execution should try to fill TSLA but REJECT it due to insufficient cash ($250 < $2000)
+	bm.ExecutePendingOrders(bar2)
+
+	if len(bm.PendingOrders) != 0 {
+		t.Fatalf("Expected 0 pending orders (TSLA dropped), got %d", len(bm.PendingOrders))
+	}
+	if len(bm.Fills) != 1 { // Still 1, TSLA was rejected
+		t.Fatalf("Expected 1 fill event, got %d", len(bm.Fills))
+	}
+
+	// Portfolio cash should remain exactly 250
+	if pf.Cash != 250.0 {
+		t.Errorf("Expected cash to remain 250, got %f", pf.Cash)
 	}
 }

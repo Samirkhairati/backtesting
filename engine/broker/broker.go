@@ -1,8 +1,10 @@
 package broker
 
 import (
+	"log"
 	"time"
 
+	"github.com/samirkhairati/backtesting/engine/data"
 	"github.com/samirkhairati/backtesting/engine/portfolio"
 )
 
@@ -13,9 +15,19 @@ type Broker interface {
 	GetPosition(symbol string) *portfolio.Position
 }
 
+// FillEvent tracks successful order executions
+type FillEvent struct {
+	OrderID   string
+	Symbol    string
+	Quantity  float64
+	Price     float64
+	Timestamp time.Time
+}
+
 // OrderManager implements Broker and acts as the bridge between strategies and the execution engine.
 type OrderManager struct {
 	PendingOrders []*Order
+	Fills         []*FillEvent
 	portfolio     *portfolio.Portfolio
 
 	// internal clock injected by simulator to timestamp new orders
@@ -26,6 +38,7 @@ type OrderManager struct {
 func NewOrderManager(pf *portfolio.Portfolio) *OrderManager {
 	return &OrderManager{
 		PendingOrders: make([]*Order, 0),
+		Fills:         make([]*FillEvent, 0),
 		portfolio:     pf,
 	}
 }
@@ -64,4 +77,45 @@ func (m *OrderManager) GetPosition(symbol string) *portfolio.Position {
 		return &copyPos
 	}
 	return nil
+}
+
+// ExecutePendingOrders processes all pending orders matching the current bar's symbol
+// at the bar's Open price, effectively converting yesterday's signals into today's fills.
+func (m *OrderManager) ExecutePendingOrders(bar data.Bar) {
+	var remainingOrders []*Order
+
+	for _, order := range m.PendingOrders {
+		// Only process orders for the current symbol being updated
+		if order.Symbol != bar.Symbol {
+			remainingOrders = append(remainingOrders, order)
+			continue
+		}
+
+		// Attempt to fill the order using today's OPEN price
+		err := m.portfolio.AddPosition(order.Symbol, order.Quantity, bar.Open)
+		
+		if err != nil {
+			// e.g. ErrInsufficientCash
+			order.Status = OrderStatusRejected
+			log.Printf("[Broker] Order REJECTED: %s %f shares @ $%.2f (Reason: %v)", order.Symbol, order.Quantity, bar.Open, err)
+			// Order is dropped from queue (not appended to remainingOrders)
+			continue
+		}
+
+		// Order successful
+		order.Status = OrderStatusFilled
+		fill := &FillEvent{
+			OrderID:   order.ID,
+			Symbol:    order.Symbol,
+			Quantity:  order.Quantity,
+			Price:     bar.Open,
+			Timestamp: bar.Timestamp,
+		}
+		m.Fills = append(m.Fills, fill)
+		
+		log.Printf("[Broker] Order FILLED: %s %f shares @ $%.2f", order.Symbol, order.Quantity, bar.Open)
+		// Order is dropped from pending queue
+	}
+
+	m.PendingOrders = remainingOrders
 }
