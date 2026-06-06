@@ -7,29 +7,38 @@ import (
 )
 
 func TestSMA(t *testing.T) {
-	prices := []float64{10, 20, 30, 40, 50}
+	sma := strategy.NewSMA(3)
 
-	// SMA period 3: (30 + 40 + 50) / 3 = 120 / 3 = 40
-	sma := strategy.SMA(prices, 3)
-	if sma != 40 {
-		t.Errorf("Expected SMA 40, got %f", sma)
+	// Feed 1: 10
+	val := sma.Update(10)
+	if val != 0 {
+		t.Errorf("Expected 0 before buffer is full, got %f", val)
 	}
 
-	// SMA period 5: (10 + 20 + 30 + 40 + 50) / 5 = 150 / 5 = 30
-	sma = strategy.SMA(prices, 5)
-	if sma != 30 {
-		t.Errorf("Expected SMA 30, got %f", sma)
+	// Feed 2: 20
+	val = sma.Update(20)
+	if val != 0 {
+		t.Errorf("Expected 0 before buffer is full, got %f", val)
 	}
 
-	// Not enough data
-	sma = strategy.SMA(prices, 10)
-	if sma != 0 {
-		t.Errorf("Expected 0 for insufficient data, got %f", sma)
+	// Feed 3: 30 (Buffer Full)
+	// (10 + 20 + 30) / 3 = 20
+	val = sma.Update(30)
+	if val != 20 {
+		t.Errorf("Expected 20, got %f", val)
 	}
 
-	// Invalid period
-	sma = strategy.SMA(prices, 0)
-	if sma != 0 {
-		t.Errorf("Expected 0 for period 0, got %f", sma)
+	// Feed 4: 40 (10 drops out)
+	// (20 + 30 + 40) / 3 = 30
+	val = sma.Update(40)
+	if val != 30 {
+		t.Errorf("Expected 30, got %f", val)
+	}
+
+	// Feed 5: 50 (20 drops out)
+	// (30 + 40 + 50) / 3 = 40
+	val = sma.Update(50)
+	if val != 40 {
+		t.Errorf("Expected 40, got %f", val)
 	}
 }
