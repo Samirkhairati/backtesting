@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/samirkhairati/backtesting/engine/broker"
 	"github.com/samirkhairati/backtesting/engine/data"
 	"github.com/samirkhairati/backtesting/engine/simulator"
 )
@@ -33,7 +34,7 @@ type mockStrategy struct {
 	receivedBars []data.Bar
 }
 
-func (s *mockStrategy) OnBar(bar data.Bar) {
+func (s *mockStrategy) OnBar(b broker.Broker, bar data.Bar) {
 	s.receivedBars = append(s.receivedBars, bar)
 }
 
