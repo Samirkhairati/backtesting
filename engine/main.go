@@ -26,7 +26,7 @@ func main() {
 		log.Fatalf("Failed to get bars for %s: %v", symbol, err)
 	}
 
-	strat := strategy.NewPrintingStrategy()
+	strat := strategy.NewSMACrossStrategy(50, 200)
 	simEngine := simulator.NewEngine(iter, strat)
 
 	log.Println("Starting Market Replay Simulation...")
@@ -34,6 +34,6 @@ func main() {
 		log.Fatalf("Simulation encountered an error: %v", err)
 	}
 
-	log.Printf("Simulation finished! Processed %d bars. Final clock: %v", strat.Count(), simEngine.CurrentTime.Format("2006-01-02"))
+	log.Printf("Simulation finished! Final clock: %v", simEngine.CurrentTime.Format("2006-01-02"))
 	log.Printf("Final Portfolio Value: $%.2f", simEngine.Portfolio.TotalValue())
 }

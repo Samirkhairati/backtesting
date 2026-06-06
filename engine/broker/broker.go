@@ -13,6 +13,7 @@ type Broker interface {
 	SubmitOrder(symbol string, quantity float64)
 	ClosePosition(symbol string) error
 	GetPosition(symbol string) *portfolio.Position
+	GetCash() float64
 }
 
 // FillEvent tracks successful order executions
@@ -77,6 +78,11 @@ func (m *OrderManager) GetPosition(symbol string) *portfolio.Position {
 		return &copyPos
 	}
 	return nil
+}
+
+// GetCash safely returns the current cash balance of the portfolio.
+func (m *OrderManager) GetCash() float64 {
+	return m.portfolio.Cash
 }
 
 // ExecutePendingOrders processes all pending orders matching the current bar's symbol
