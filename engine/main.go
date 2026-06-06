@@ -21,19 +21,39 @@ func main() {
 	symbol := "AAPL"
 	log.Printf("Fetching historical data for %s...", symbol)
 
-	iter, err := store.GetBars(ctx, symbol)
-	if err != nil {
-		log.Fatalf("Failed to get bars for %s: %v", symbol, err)
+	strategies := map[string]strategy.Strategy{
+		"Buy and Hold":          strategy.NewBuyAndHoldStrategy(),
+		"SMA Cross (50, 200)":   strategy.NewSMACrossStrategy(50, 200),
+		"MACD (12, 26, 9)":      strategy.NewMACDStrategy(),
+		"RSI Mean Reversion":    strategy.NewMeanReversionStrategy(),
+		"Bollinger Bands":       strategy.NewBollingerBandsStrategy(),
 	}
 
-	strat := strategy.NewSMACrossStrategy(50, 200)
-	simEngine := simulator.NewEngine(iter, strat)
+	results := make(map[string]float64)
 
-	log.Println("Starting Market Replay Simulation...")
-	if err := simEngine.Run(); err != nil {
-		log.Fatalf("Simulation encountered an error: %v", err)
+	for name, strat := range strategies {
+		log.Printf("\n--- Running Strategy: %s ---", name)
+		
+		// Fetch fresh iterator for each run
+		iter, err := store.GetBars(ctx, symbol)
+		if err != nil {
+			log.Fatalf("Failed to get bars for %s: %v", symbol, err)
+		}
+
+		simEngine := simulator.NewEngine(iter, strat)
+		
+		if err := simEngine.Run(); err != nil {
+			log.Fatalf("Simulation encountered an error on %s: %v", name, err)
+		}
+		
+		results[name] = simEngine.Portfolio.TotalValue()
 	}
 
-	log.Printf("Simulation finished! Final clock: %v", simEngine.CurrentTime.Format("2006-01-02"))
-	log.Printf("Final Portfolio Value: $%.2f", simEngine.Portfolio.TotalValue())
+	log.Println("\n======================================")
+	log.Println("       FINAL SIMULATION RESULTS       ")
+	log.Println("======================================")
+	for name, val := range results {
+		profit := ((val - 100000.0) / 100000.0) * 100.0
+		log.Printf("%-25s: $%-10.2f (%+5.2f%%)", name, val, profit)
+	}
 }
