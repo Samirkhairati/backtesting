@@ -7,44 +7,58 @@ import (
 	"github.com/samirkhairati/backtesting/engine/data"
 )
 
-type MeanReversionStrategy struct {
+type meanReversionState struct {
 	rsi *RSI
+}
+
+type MeanReversionStrategy struct {
+	states map[string]*meanReversionState
 }
 
 func NewMeanReversionStrategy() *MeanReversionStrategy {
 	return &MeanReversionStrategy{
-		rsi: NewRSI(14),
+		states: make(map[string]*meanReversionState),
 	}
 }
 
-func (s *MeanReversionStrategy) OnBar(b broker.Broker, bar data.Bar) {
-	rsiVal := s.rsi.Update(bar.Close)
+func (s *MeanReversionStrategy) OnBars(b broker.Broker, bars map[string]data.Bar) {
+	for symbol, bar := range bars {
+		state, exists := s.states[symbol]
+		if !exists {
+			state = &meanReversionState{
+				rsi: NewRSI(14),
+			}
+			s.states[symbol] = state
+		}
 
-	if rsiVal == 0 {
-		return // not enough data
-	}
+		rsiVal := state.rsi.Update(bar.Close)
 
-	pos := b.GetPosition(bar.Symbol)
-	isLong := pos != nil && pos.Quantity > 0
+		if rsiVal == 0 {
+			continue // not enough data
+		}
 
-	// Buy when oversold
-	if rsiVal < 30 {
-		if !isLong {
-			cash := b.GetCash()
-			affordable := cash * 0.95
-			shares := affordable / bar.Close
-			if shares > 0 {
-				log.Printf("[MeanReversion] %s RSI Oversold (%.2f). Buying %f shares.", bar.Symbol, rsiVal, shares)
-				b.SubmitOrder(bar.Symbol, shares)
+		pos := b.GetPosition(symbol)
+		isLong := pos != nil && pos.Quantity > 0
+
+		// Buy when oversold
+		if rsiVal < 30 {
+			if !isLong {
+				cash := b.GetCash()
+				affordable := cash * 0.20 // 20% of cash allocation per signal
+				shares := affordable / bar.Close
+				if shares > 0 {
+					log.Printf("[MeanReversion] %s RSI Oversold (%.2f). Buying %f shares.", symbol, rsiVal, shares)
+					b.SubmitOrder(symbol, shares)
+				}
 			}
 		}
-	}
 
-	// Sell when overbought
-	if rsiVal > 70 {
-		if isLong {
-			log.Printf("[MeanReversion] %s RSI Overbought (%.2f). Closing position.", bar.Symbol, rsiVal)
-			b.ClosePosition(bar.Symbol)
+		// Sell when overbought
+		if rsiVal > 70 {
+			if isLong {
+				log.Printf("[MeanReversion] %s RSI Overbought (%.2f). Closing position.", symbol, rsiVal)
+				b.ClosePosition(symbol)
+			}
 		}
 	}
 }

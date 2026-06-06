@@ -14,11 +14,11 @@ type Engine struct {
 	Portfolio    *portfolio.Portfolio
 	OrderManager *broker.OrderManager
 
-	iterator data.BarIterator
+	iterator data.MultiBarIterator
 	strategy strategy.Strategy
 }
 
-func NewEngine(iter data.BarIterator, strat strategy.Strategy) *Engine {
+func NewEngine(iter data.MultiBarIterator, strat strategy.Strategy) *Engine {
 	// Start with $100,000 in cash by default
 	pf := portfolio.New()
 	pf.Deposit(100000)
@@ -33,21 +33,27 @@ func NewEngine(iter data.BarIterator, strat strategy.Strategy) *Engine {
 
 func (e *Engine) Run() error {
 	for e.iterator.Next() {
-		bar := e.iterator.Bar()
-		e.CurrentTime = bar.Timestamp
-		e.OrderManager.SetTime(bar.Timestamp)
+		bars := e.iterator.Bars()
+		ts := e.iterator.Timestamp()
+		
+		e.CurrentTime = ts
+		e.OrderManager.SetTime(ts)
 
-		// 1. EXECUTE orders from yesterday using TODAY'S OPEN price
-		e.OrderManager.ExecutePendingOrders(bar)
+		// 1. EXECUTE orders from yesterday using TODAY'S OPEN price for ALL symbols
+		for _, bar := range bars {
+			e.OrderManager.ExecutePendingOrders(bar)
+		}
 
-		// 2. Update portfolio with TODAY'S CLOSE price
-		e.Portfolio.UpdateMarketPrice(bar.Symbol, bar.Close)
+		// 2. Update portfolio with TODAY'S CLOSE price for ALL symbols
+		for symbol, bar := range bars {
+			e.Portfolio.UpdateMarketPrice(symbol, bar.Close)
+		}
 
 		// 3. Let strategy evaluate TODAY'S CLOSE and submit new orders for tomorrow
-		e.strategy.OnBar(e.OrderManager, bar)
+		e.strategy.OnBars(e.OrderManager, bars)
 
-		// 4. Snapshot equity
-		e.Portfolio.RecordEquity(bar.Timestamp)
+		// 4. Snapshot equity (ONCE per timestamp)
+		e.Portfolio.RecordEquity(ts)
 	}
 
 	return e.iterator.Err()

@@ -7,7 +7,7 @@ import (
 	"github.com/samirkhairati/backtesting/engine/data"
 )
 
-type MACDStrategy struct {
+type macdState struct {
 	fastEMA     *EMA
 	slowEMA     *EMA
 	signalEMA   *EMA
@@ -16,60 +16,74 @@ type MACDStrategy struct {
 	ready       bool
 }
 
+type MACDStrategy struct {
+	states map[string]*macdState
+}
+
 func NewMACDStrategy() *MACDStrategy {
 	return &MACDStrategy{
-		fastEMA:   NewEMA(12),
-		slowEMA:   NewEMA(26),
-		signalEMA: NewEMA(9),
+		states: make(map[string]*macdState),
 	}
 }
 
-func (s *MACDStrategy) OnBar(b broker.Broker, bar data.Bar) {
-	fast := s.fastEMA.Update(bar.Close)
-	slow := s.slowEMA.Update(bar.Close)
+func (s *MACDStrategy) OnBars(b broker.Broker, bars map[string]data.Bar) {
+	for symbol, bar := range bars {
+		state, exists := s.states[symbol]
+		if !exists {
+			state = &macdState{
+				fastEMA:   NewEMA(12),
+				slowEMA:   NewEMA(26),
+				signalEMA: NewEMA(9),
+			}
+			s.states[symbol] = state
+		}
 
-	if slow == 0 {
-		return
-	}
+		fast := state.fastEMA.Update(bar.Close)
+		slow := state.slowEMA.Update(bar.Close)
 
-	macdLine := fast - slow
-	signalLine := s.signalEMA.Update(macdLine)
+		if slow == 0 {
+			continue
+		}
 
-	if signalLine == 0 {
-		return
-	}
+		macdLine := fast - slow
+		signalLine := state.signalEMA.Update(macdLine)
 
-	if !s.ready {
-		s.prevMACD = macdLine
-		s.prevSignal = signalLine
-		s.ready = true
-		return
-	}
+		if signalLine == 0 {
+			continue
+		}
 
-	pos := b.GetPosition(bar.Symbol)
-	isLong := pos != nil && pos.Quantity > 0
+		if !state.ready {
+			state.prevMACD = macdLine
+			state.prevSignal = signalLine
+			state.ready = true
+			continue
+		}
 
-	// Bullish Cross
-	if s.prevMACD <= s.prevSignal && macdLine > signalLine {
-		if !isLong {
-			cash := b.GetCash()
-			affordable := cash * 0.95
-			shares := affordable / bar.Close
-			if shares > 0 {
-				log.Printf("[MACD] %s Bullish Cross. Buying %f shares.", bar.Symbol, shares)
-				b.SubmitOrder(bar.Symbol, shares)
+		pos := b.GetPosition(symbol)
+		isLong := pos != nil && pos.Quantity > 0
+
+		// Bullish Cross
+		if state.prevMACD <= state.prevSignal && macdLine > signalLine {
+			if !isLong {
+				cash := b.GetCash()
+				affordable := cash * 0.20 // 20% of cash as an arbitrary allocation
+				shares := affordable / bar.Close
+				if shares > 0 {
+					log.Printf("[MACD] %s Bullish Cross. Buying %f shares.", symbol, shares)
+					b.SubmitOrder(symbol, shares)
+				}
 			}
 		}
-	}
 
-	// Bearish Cross
-	if s.prevMACD >= s.prevSignal && macdLine < signalLine {
-		if isLong {
-			log.Printf("[MACD] %s Bearish Cross. Closing position.", bar.Symbol)
-			b.ClosePosition(bar.Symbol)
+		// Bearish Cross
+		if state.prevMACD >= state.prevSignal && macdLine < signalLine {
+			if isLong {
+				log.Printf("[MACD] %s Bearish Cross. Closing position.", symbol)
+				b.ClosePosition(symbol)
+			}
 		}
-	}
 
-	s.prevMACD = macdLine
-	s.prevSignal = signalLine
+		state.prevMACD = macdLine
+		state.prevSignal = signalLine
+	}
 }

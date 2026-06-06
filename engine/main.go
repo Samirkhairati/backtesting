@@ -19,8 +19,8 @@ func main() {
 	defer pool.Close()
 
 	store := postgres.NewStore(pool)
-	symbol := "AAPL"
-	log.Printf("Fetching historical data for %s...", symbol)
+	symbols := []string{"AAPL", "MSFT", "TSLA", "AMZN", "GOOGL"}
+	log.Printf("Fetching historical data for %v...", symbols)
 
 	strategies := map[string]strategy.Strategy{
 		"Buy and Hold":          strategy.NewBuyAndHoldStrategy(),
@@ -35,9 +35,9 @@ func main() {
 	for name, strat := range strategies {
 		log.Printf("\n--- Running Strategy: %s ---", name)
 		
-		iter, err := store.GetBars(ctx, symbol)
+		iter, err := store.GetMultiBars(ctx, symbols)
 		if err != nil {
-			log.Fatalf("Failed to get bars for %s: %v", symbol, err)
+			log.Fatalf("Failed to get bars for %v: %v", symbols, err)
 		}
 
 		simEngine := simulator.NewEngine(iter, strat)

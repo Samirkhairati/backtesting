@@ -17,19 +17,22 @@ func NewBuyAndHoldStrategy() *BuyAndHoldStrategy {
 	}
 }
 
-func (s *BuyAndHoldStrategy) OnBar(b broker.Broker, bar data.Bar) {
-	if !s.hasBought {
-		// Calculate max shares we can afford with our current cash
+func (s *BuyAndHoldStrategy) OnBars(b broker.Broker, bars map[string]data.Bar) {
+	if !s.hasBought && len(bars) > 0 {
 		cash := b.GetCash()
-		// Since we execute at the next day's open, we'll leave a tiny buffer to avoid overdrawing
-		// if the open price gaps up slightly. We'll use 95% of cash.
+		// 95% buffer to avoid overdrawing
 		affordable := cash * 0.95
-		shares := affordable / bar.Close
+		
+		// Split capital evenly among all available assets
+		allocation := affordable / float64(len(bars))
 
-		if shares > 0 {
-			b.SubmitOrder(bar.Symbol, shares)
-			log.Printf("[BuyAndHold] Submitting order for %f shares of %s based on close $%.2f", shares, bar.Symbol, bar.Close)
-			s.hasBought = true
+		for symbol, bar := range bars {
+			shares := allocation / bar.Close
+			if shares > 0 {
+				b.SubmitOrder(symbol, shares)
+				log.Printf("[BuyAndHold] Submitting order for %f shares of %s based on close $%.2f", shares, symbol, bar.Close)
+			}
 		}
+		s.hasBought = true
 	}
 }

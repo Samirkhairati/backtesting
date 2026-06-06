@@ -7,5 +7,5 @@ import (
 
 // Strategy defines the interface for trading algorithms
 type Strategy interface {
-	OnBar(broker broker.Broker, bar data.Bar)
+	OnBars(broker broker.Broker, bars map[string]data.Bar)
 }
