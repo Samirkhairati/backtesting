@@ -14,24 +14,25 @@ services:
       timeout: 5s
       retries: 5
 
-  engine-dev:
+  worker-dev:
     build:
-      context: ./engine
+      context: .
       target: dev
-    container_name: backtesting_engine_dev
+    container_name: backtesting_worker_dev
     profiles: ["dev"]
     volumes:
-      - ./engine:/app
+      - .:/app
     env_file: .env
+    command: sh -c "go mod tidy && air"
     depends_on:
       postgres:
         condition: service_healthy
 
-  engine-prod:
+  worker-prod:
     build:
-      context: ./engine
+      context: .
       target: prod
-    container_name: backtesting_engine_prod
+    container_name: backtesting_worker_prod
     profiles: ["prod"]
     env_file: .env
     depends_on:
