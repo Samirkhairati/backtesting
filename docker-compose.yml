@@ -3,7 +3,7 @@ services:
     image: postgres:16-alpine
     container_name: backtesting_postgres
     profiles: ["dev", "prod"]
-    env_file: .env
+    env_file: .env.dev
     ports:
       - "5432:5432"
     volumes:
@@ -24,9 +24,7 @@ services:
       - "8080:8080"
     volumes:
       - .:/app
-    env_file: .env
-    environment:
-      - GIN_MODE=debug
+    env_file: .env.dev
     command: sh -c "go mod tidy && air -c .air.api.toml"
     depends_on:
       postgres:
@@ -42,9 +40,7 @@ services:
     profiles: ["prod"]
     ports:
       - "8080:8080"
-    env_file: .env
-    environment:
-      - GIN_MODE=release
+    env_file: .env.prod
     depends_on:
       postgres:
         condition: service_healthy
@@ -57,7 +53,7 @@ services:
     profiles: ["dev"]
     volumes:
       - .:/app
-    env_file: .env
+    env_file: .env.dev
     command: sh -c "go mod tidy && air -c .air.toml"
     depends_on:
       postgres:
@@ -71,7 +67,7 @@ services:
         - SERVICE=worker
     container_name: backtesting_worker_prod
     profiles: ["prod"]
-    env_file: .env
+    env_file: .env.prod
     depends_on:
       postgres:
         condition: service_healthy
