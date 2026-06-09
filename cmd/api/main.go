@@ -1,17 +1,21 @@
 package main
 
 import (
-	"log"
-
 	"github.com/samirkhairati/backtesting/core/api/router"
+	"github.com/samirkhairati/backtesting/core/logger"
+	"go.uber.org/zap"
 )
 
 func main() {
-	log.Println("Starting API Server on port 8080...")
+	// Initialize structured logger
+	logger.Init()
+	defer logger.Sync()
+
+	logger.Log.Info("Starting API Server on port 8080...")
 
 	r := router.SetupRouter()
 
 	if err := r.Run(":8080"); err != nil {
-		log.Fatalf("Failed to start API server: %v", err)
+		logger.Log.Fatal("Failed to start API server", zap.Error(err))
 	}
 }

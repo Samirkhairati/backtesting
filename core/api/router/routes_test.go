@@ -6,10 +6,14 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/samirkhairati/backtesting/core/logger"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestHealthCheckRoute(t *testing.T) {
+	// Initialize the global logger for the middleware
+	logger.Init()
+
 	// Setup the router
 	router := SetupRouter()
 
