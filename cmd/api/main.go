@@ -15,9 +15,9 @@ func main() {
 	logger.Init()
 	defer logger.Sync()
 
-	port := os.Getenv("PORT")
+	port := os.Getenv("API_CONTAINER_PORT")
 	if port == "" {
-		port = "8080"
+		logger.Log.Fatal("API_CONTAINER_PORT environment variable is not set")
 	}
 
 	logger.Log.Sugar().Infof("Starting API Server on port %s...", port)
@@ -26,7 +26,7 @@ func main() {
 	dbPool := db.Setup(ctx)
 	defer dbPool.Close()
 
-	r := router.SetupRouter()
+	r := router.SetupRouter(dbPool)
 
 	if err := r.Run(":" + port); err != nil {
 		logger.Log.Fatal("Failed to start API server", zap.Error(err))

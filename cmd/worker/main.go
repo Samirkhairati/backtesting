@@ -23,29 +23,29 @@ func main() {
 	log.Printf("Fetching historical data for %v...", symbols)
 
 	strategies := map[string]strategy.Strategy{
-		"Buy and Hold":          strategy.NewBuyAndHoldStrategy(),
-		"SMA Cross (50, 200)":   strategy.NewSMACrossStrategy(50, 200),
-		"MACD (12, 26, 9)":      strategy.NewMACDStrategy(),
-		"RSI Mean Reversion":    strategy.NewMeanReversionStrategy(),
-		"Bollinger Bands":       strategy.NewBollingerBandsStrategy(),
+		"Buy and Hold":        strategy.NewBuyAndHoldStrategy(),
+		"SMA Cross (50, 200)": strategy.NewSMACrossStrategy(50, 200),
+		"MACD (12, 26, 9)":    strategy.NewMACDStrategy(),
+		"RSI Mean Reversion":  strategy.NewMeanReversionStrategy(),
+		"Bollinger Bands":     strategy.NewBollingerBandsStrategy(),
 	}
 
 	results := make(map[string]*metrics.PerformanceReport)
 
 	for name, strat := range strategies {
 		log.Printf("\n--- Running Strategy: %s ---", name)
-		
+
 		iter, err := store.GetMultiBars(ctx, symbols)
 		if err != nil {
 			log.Fatalf("Failed to get bars for %v: %v", symbols, err)
 		}
 
 		simEngine := simulator.NewEngine(iter, strat)
-		
+
 		if err := simEngine.Run(); err != nil {
 			log.Fatalf("Simulation encountered an error on %s: %v", name, err)
 		}
-		
+
 		results[name] = metrics.GenerateReport(simEngine.Portfolio)
 	}
 

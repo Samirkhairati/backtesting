@@ -21,7 +21,7 @@ services:
     container_name: backtesting_api_dev
     profiles: ["dev"]
     ports:
-      - "${API_PORT:-8080}:${PORT:-8080}"
+      - "${API_HOST_PORT:-8080}:${API_CONTAINER_PORT:-8080}"
     volumes:
       - .:/app
     env_file: .env.dev
@@ -39,7 +39,7 @@ services:
     container_name: backtesting_api_prod
     profiles: ["prod"]
     ports:
-      - "${API_PORT:-8080}:${PORT:-8080}"
+      - "${API_HOST_PORT:-8080}:${API_CONTAINER_PORT:-8080}"
     env_file: .env.prod
     depends_on:
       postgres:

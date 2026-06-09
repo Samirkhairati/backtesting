@@ -15,14 +15,14 @@ func TestHealthCheckRoute(t *testing.T) {
 	logger.Init()
 
 	// Setup the router
-	router := SetupRouter()
+	r := SetupRouter(nil) // Pass nil DB pool for healthcheck test
 
 	// Create a new HTTP GET request to /health
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/health", nil)
 
 	// Serve the HTTP request
-	router.ServeHTTP(w, req)
+	r.ServeHTTP(w, req)
 
 	// Assert HTTP Status Code is 200 OK
 	assert.Equal(t, http.StatusOK, w.Code)
