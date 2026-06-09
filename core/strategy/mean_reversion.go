@@ -1,7 +1,7 @@
 package strategy
 
 import (
-	"log"
+	"github.com/samirkhairati/backtesting/core/logger"
 
 	"github.com/samirkhairati/backtesting/core/broker"
 	"github.com/samirkhairati/backtesting/core/data"
@@ -47,7 +47,7 @@ func (s *MeanReversionStrategy) OnBars(b broker.Broker, bars map[string]data.Bar
 				affordable := cash * 0.20 // 20% of cash allocation per signal
 				shares := affordable / bar.Close
 				if shares > 0 {
-					log.Printf("[MeanReversion] %s RSI Oversold (%.2f). Buying %f shares.", symbol, rsiVal, shares)
+					logger.Log.Sugar().Infof("[MeanReversion] %s RSI Oversold (%.2f). Buying %f shares.", symbol, rsiVal, shares)
 					b.SubmitOrder(symbol, shares)
 				}
 			}
@@ -56,7 +56,7 @@ func (s *MeanReversionStrategy) OnBars(b broker.Broker, bars map[string]data.Bar
 		// Sell when overbought
 		if rsiVal > 70 {
 			if isLong {
-				log.Printf("[MeanReversion] %s RSI Overbought (%.2f). Closing position.", symbol, rsiVal)
+				logger.Log.Sugar().Infof("[MeanReversion] %s RSI Overbought (%.2f). Closing position.", symbol, rsiVal)
 				b.ClosePosition(symbol)
 			}
 		}

@@ -84,4 +84,3 @@ func TestEngine_Run(t *testing.T) {
 		t.Errorf("Expected engine clock to be %v, got %v", t2, engine.CurrentTime)
 	}
 }
-

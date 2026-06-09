@@ -96,7 +96,7 @@ func (p *Portfolio) AddPosition(symbol string, quantity float64, price float64, 
 	if quantity > 0 && p.Cash < cost {
 		return ErrInsufficientCash
 	}
-	
+
 	// If shorting, check margin (short exposure shouldn't exceed TotalValue)
 	if quantity < 0 && -cost > p.TotalValue() {
 		return ErrInsufficientMargin
@@ -134,14 +134,14 @@ func (p *Portfolio) AddPosition(symbol string, quantity float64, price float64, 
 			// Selling to close a Long
 			pnl = (price - lot.Price) * matchQty
 			returnPct = ((price - lot.Price) / lot.Price) * 100.0
-			
+
 			remainingQty += matchQty // selling removes positive quantity
 			lot.Quantity -= matchQty
 		} else {
 			// Buying to close a Short
 			pnl = (lot.Price - price) * matchQty
 			returnPct = ((lot.Price - price) / lot.Price) * 100.0
-			
+
 			remainingQty -= matchQty // buying removes negative quantity
 			lot.Quantity += matchQty
 		}
@@ -183,7 +183,7 @@ func (p *Portfolio) AddPosition(symbol string, quantity float64, price float64, 
 		return nil
 	}
 
-	// Average cost calculation (only for increasing position size, 
+	// Average cost calculation (only for increasing position size,
 	// decreasing size doesn't change average cost basis of remaining shares)
 	newQuantity := pos.Quantity + quantity
 	if newQuantity == 0 {
@@ -200,4 +200,3 @@ func (p *Portfolio) AddPosition(symbol string, quantity float64, price float64, 
 	pos.Quantity = newQuantity
 	return nil
 }
-

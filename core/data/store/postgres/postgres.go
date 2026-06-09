@@ -136,7 +136,7 @@ func (i *postgresMultiIterator) Next() bool {
 
 	// Clear previous bars
 	i.bars = make(map[string]data.Bar)
-	
+
 	// The timestamp for this iteration is the timestamp of the lookahead bar
 	i.timestamp = i.nextBar.Timestamp
 

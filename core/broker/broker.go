@@ -1,7 +1,7 @@
 package broker
 
 import (
-	"log"
+	"github.com/samirkhairati/backtesting/core/logger"
 	"time"
 
 	"github.com/samirkhairati/backtesting/core/data"
@@ -32,7 +32,7 @@ type OrderManager struct {
 	portfolio     *portfolio.Portfolio
 
 	// internal clock injected by simulator to timestamp new orders
-	currentTime time.Time 
+	currentTime time.Time
 }
 
 // NewOrderManager initializes an empty OrderManager.
@@ -74,7 +74,7 @@ func (m *OrderManager) ClosePosition(symbol string) error {
 func (m *OrderManager) GetPosition(symbol string) *portfolio.Position {
 	if pos, exists := m.portfolio.Positions[symbol]; exists {
 		// Return a copy so the strategy can't mutate the real portfolio pointer
-		copyPos := *pos 
+		copyPos := *pos
 		return &copyPos
 	}
 	return nil
@@ -99,11 +99,11 @@ func (m *OrderManager) ExecutePendingOrders(bar data.Bar) {
 
 		// Attempt to fill the order using today's OPEN price
 		err := m.portfolio.AddPosition(order.Symbol, order.Quantity, bar.Open, bar.Timestamp)
-		
+
 		if err != nil {
 			// e.g. ErrInsufficientCash or ErrInsufficientMargin
 			order.Status = OrderStatusRejected
-			log.Printf("[Broker] Order REJECTED: %s %f shares @ $%.2f (Reason: %v)", order.Symbol, order.Quantity, bar.Open, err)
+			logger.Log.Sugar().Infof("[Broker] Order REJECTED: %s %f shares @ $%.2f (Reason: %v)", order.Symbol, order.Quantity, bar.Open, err)
 			// Order is dropped from queue (not appended to remainingOrders)
 			continue
 		}
@@ -118,8 +118,8 @@ func (m *OrderManager) ExecutePendingOrders(bar data.Bar) {
 			Timestamp: bar.Timestamp,
 		}
 		m.Fills = append(m.Fills, fill)
-		
-		log.Printf("[Broker] Order FILLED: %s %f shares @ $%.2f", order.Symbol, order.Quantity, bar.Open)
+
+		logger.Log.Sugar().Infof("[Broker] Order FILLED: %s %f shares @ $%.2f", order.Symbol, order.Quantity, bar.Open)
 		// Order is dropped from pending queue
 	}
 

@@ -99,7 +99,7 @@ func TestExecutionEngine(t *testing.T) {
 	bm.SetTime(time.Now())
 
 	// Submit 2 orders: one valid, one that will be rejected due to insufficient cash
-	bm.SubmitOrder("AAPL", 5) // Should cost ~ $750 if Open is $150
+	bm.SubmitOrder("AAPL", 5)  // Should cost ~ $750 if Open is $150
 	bm.SubmitOrder("TSLA", 10) // Should cost ~$2000, will fail
 
 	if len(bm.PendingOrders) != 2 {

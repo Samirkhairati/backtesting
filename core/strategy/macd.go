@@ -1,19 +1,19 @@
 package strategy
 
 import (
-	"log"
+	"github.com/samirkhairati/backtesting/core/logger"
 
 	"github.com/samirkhairati/backtesting/core/broker"
 	"github.com/samirkhairati/backtesting/core/data"
 )
 
 type macdState struct {
-	fastEMA     *EMA
-	slowEMA     *EMA
-	signalEMA   *EMA
-	prevMACD    float64
-	prevSignal  float64
-	ready       bool
+	fastEMA    *EMA
+	slowEMA    *EMA
+	signalEMA  *EMA
+	prevMACD   float64
+	prevSignal float64
+	ready      bool
 }
 
 type MACDStrategy struct {
@@ -69,7 +69,7 @@ func (s *MACDStrategy) OnBars(b broker.Broker, bars map[string]data.Bar) {
 				affordable := cash * 0.20 // 20% of cash as an arbitrary allocation
 				shares := affordable / bar.Close
 				if shares > 0 {
-					log.Printf("[MACD] %s Bullish Cross. Buying %f shares.", symbol, shares)
+					logger.Log.Sugar().Infof("[MACD] %s Bullish Cross. Buying %f shares.", symbol, shares)
 					b.SubmitOrder(symbol, shares)
 				}
 			}
@@ -78,7 +78,7 @@ func (s *MACDStrategy) OnBars(b broker.Broker, bars map[string]data.Bar) {
 		// Bearish Cross
 		if state.prevMACD >= state.prevSignal && macdLine < signalLine {
 			if isLong {
-				log.Printf("[MACD] %s Bearish Cross. Closing position.", symbol)
+				logger.Log.Sugar().Infof("[MACD] %s Bearish Cross. Closing position.", symbol)
 				b.ClosePosition(symbol)
 			}
 		}

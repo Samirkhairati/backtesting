@@ -35,7 +35,7 @@ func (e *Engine) Run() error {
 	for e.iterator.Next() {
 		bars := e.iterator.Bars()
 		ts := e.iterator.Timestamp()
-		
+
 		e.CurrentTime = ts
 		e.OrderManager.SetTime(ts)
 

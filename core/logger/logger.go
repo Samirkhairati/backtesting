@@ -9,6 +9,11 @@ import (
 
 var Log *zap.Logger
 
+func init() {
+	// Initialize a default no-op logger so tests don't panic if they forget to call Init()
+	Log = zap.NewNop()
+}
+
 // Init initializes the global logger based on the environment (dev vs prod)
 func Init() {
 	var config zap.Config

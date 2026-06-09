@@ -1,7 +1,7 @@
 package strategy
 
 import (
-	"log"
+	"github.com/samirkhairati/backtesting/core/logger"
 
 	"github.com/samirkhairati/backtesting/core/broker"
 	"github.com/samirkhairati/backtesting/core/data"
@@ -69,7 +69,7 @@ func (s *SMACrossStrategy) OnBars(b broker.Broker, bars map[string]data.Bar) {
 				affordable := cash * 0.20
 				shares := affordable / bar.Close
 				if shares > 0 {
-					log.Printf("[SMACross] %s Golden Cross detected (Fast: %.2f > Slow: %.2f). Buying %f shares.", symbol, fast, slow, shares)
+					logger.Log.Sugar().Infof("[SMACross] %s Golden Cross detected (Fast: %.2f > Slow: %.2f). Buying %f shares.", symbol, fast, slow, shares)
 					b.SubmitOrder(symbol, shares)
 				}
 			}
@@ -78,7 +78,7 @@ func (s *SMACrossStrategy) OnBars(b broker.Broker, bars map[string]data.Bar) {
 		// Death Cross: Fast crosses below Slow
 		if state.prevFast >= state.prevSlow && fast < slow {
 			if isLong {
-				log.Printf("[SMACross] %s Death Cross detected (Fast: %.2f < Slow: %.2f). Closing position.", symbol, fast, slow)
+				logger.Log.Sugar().Infof("[SMACross] %s Death Cross detected (Fast: %.2f < Slow: %.2f). Closing position.", symbol, fast, slow)
 				b.ClosePosition(symbol)
 			}
 		}

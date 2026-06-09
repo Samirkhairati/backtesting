@@ -54,12 +54,12 @@ func TestSMA(t *testing.T) {
 
 func TestEMA(t *testing.T) {
 	ema := strategy.NewEMA(3) // multiplier = 2 / 4 = 0.5
-	
+
 	val := ema.Update(10) // wait for more data
 	if val != 0 {
 		t.Errorf("Expected 0 initially, got %f", val)
 	}
-	
+
 	val = ema.Update(20) // (20-10)*0.5 + 10 = 15
 	if val != 0 {
 		t.Errorf("Expected 0 until period met, got %f", val)
@@ -76,11 +76,15 @@ func TestRSI(t *testing.T) {
 
 	// Price 10
 	val := rsi.Update(10)
-	if val != 0 { t.Errorf("Expected 0, got %f", val) }
+	if val != 0 {
+		t.Errorf("Expected 0, got %f", val)
+	}
 
 	// Price 20 (Gain 10)
 	val = rsi.Update(20)
-	if val != 0 { t.Errorf("Expected 0, got %f", val) }
+	if val != 0 {
+		t.Errorf("Expected 0, got %f", val)
+	}
 
 	// Price 15 (Loss 5)
 	// Initial SMA: avgGain = (10+0)/2 = 5, avgLoss = (0+5)/2 = 2.5

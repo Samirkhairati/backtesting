@@ -2,7 +2,7 @@ package db
 
 import (
 	"context"
-	"log"
+	"github.com/samirkhairati/backtesting/core/logger"
 	"os"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -14,25 +14,25 @@ import (
 func Setup(ctx context.Context) *pgxpool.Pool {
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		log.Fatal("DATABASE_URL environment variable is not set")
+		logger.Log.Fatal("DATABASE_URL environment variable is not set")
 	}
 
-	log.Println("Running database migrations...")
+	logger.Log.Info("Running database migrations...")
 	m, err := migrate.New("file://core/db/migrations", dbURL)
 	if err != nil {
-		log.Fatalf("Failed to initialize migrations: %v", err)
+		logger.Log.Sugar().Fatalf("Failed to initialize migrations: %v", err)
 	}
 
 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-		log.Fatalf("Failed to run migrations: %v", err)
+		logger.Log.Sugar().Fatalf("Failed to run migrations: %v", err)
 	}
-	log.Println("Database migrations applied successfully!")
+	logger.Log.Info("Database migrations applied successfully!")
 
 	pool, err := pgxpool.New(ctx, dbURL)
 	if err != nil {
-		log.Fatalf("Unable to connect to database: %v", err)
+		logger.Log.Sugar().Fatalf("Unable to connect to database: %v", err)
 	}
 
-	log.Println("Successfully connected to the PostgreSQL database!")
+	logger.Log.Info("Successfully connected to the PostgreSQL database!")
 	return pool
 }

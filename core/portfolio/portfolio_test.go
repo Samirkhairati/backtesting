@@ -174,7 +174,7 @@ func TestShortSellingPnL(t *testing.T) {
 	if len(pf.ClosedTrades) != 1 {
 		t.Fatalf("Expected 1 closed trade, got %d", len(pf.ClosedTrades))
 	}
-	
+
 	tr := pf.ClosedTrades[0]
 	if tr.PnL != 5000 { // (150 - 100) * 100
 		t.Errorf("Expected PnL 5000, got %f", tr.PnL)
@@ -190,7 +190,7 @@ func TestShortSellingMargin(t *testing.T) {
 	if err != portfolio.ErrInsufficientMargin {
 		t.Fatalf("Expected ErrInsufficientMargin, got %v", err)
 	}
-	
+
 	// Try to short $500 worth of AAPL, which should succeed
 	err = pf.AddPosition("AAPL", -5, 100, time.Now())
 	if err != nil {
@@ -214,4 +214,3 @@ func TestCloseShortPosition(t *testing.T) {
 		t.Fatalf("Position should be removed after covering")
 	}
 }
-

@@ -39,7 +39,7 @@ func GenerateReport(pf *portfolio.Portfolio) *PerformanceReport {
 	// Max Drawdown & Daily Returns (for Sharpe using Welford's algorithm)
 	maxEquity := initialValue
 	maxDrawdown := 0.0
-	
+
 	// Welford's online algorithm variables for Sharpe Ratio
 	n := 0.0
 	meanReturn := 0.0
@@ -48,11 +48,11 @@ func GenerateReport(pf *portfolio.Portfolio) *PerformanceReport {
 	for i := 1; i < len(pf.EquityCurve); i++ {
 		current := pf.EquityCurve[i].Value
 		prev := pf.EquityCurve[i-1].Value
-		
+
 		if current > maxEquity {
 			maxEquity = current
 		}
-		
+
 		drawdown := ((maxEquity - current) / maxEquity) * 100.0
 		if drawdown > maxDrawdown {
 			maxDrawdown = drawdown
