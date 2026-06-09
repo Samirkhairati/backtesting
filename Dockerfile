@@ -13,11 +13,12 @@ CMD sh -c "go mod tidy && air"
 
 # Builder stage for compiling the production binary
 FROM base AS builder
-RUN CGO_ENABLED=0 GOOS=linux go build -o worker ./cmd/worker
+ARG SERVICE
+RUN CGO_ENABLED=0 GOOS=linux go build -o main ./cmd/${SERVICE}
 
 # Production stage
 FROM alpine:latest AS prod
 RUN apk --no-cache add ca-certificates tzdata
 WORKDIR /root/
-COPY --from=builder /app/worker .
-CMD ["./worker"]
+COPY --from=builder /app/main .
+CMD ["./main"]

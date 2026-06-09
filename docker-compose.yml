@@ -14,6 +14,41 @@ services:
       timeout: 5s
       retries: 5
 
+  api-dev:
+    build:
+      context: .
+      target: dev
+    container_name: backtesting_api_dev
+    profiles: ["dev"]
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/app
+    env_file: .env
+    environment:
+      - GIN_MODE=debug
+    command: sh -c "go mod tidy && air -c .air.api.toml"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api-prod:
+    build:
+      context: .
+      target: prod
+      args:
+        - SERVICE=api
+    container_name: backtesting_api_prod
+    profiles: ["prod"]
+    ports:
+      - "8080:8080"
+    env_file: .env
+    environment:
+      - GIN_MODE=release
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   worker-dev:
     build:
       context: .
@@ -23,7 +58,7 @@ services:
     volumes:
       - .:/app
     env_file: .env
-    command: sh -c "go mod tidy && air"
+    command: sh -c "go mod tidy && air -c .air.toml"
     depends_on:
       postgres:
         condition: service_healthy
@@ -32,6 +67,8 @@ services:
     build:
       context: .
       target: prod
+      args:
+        - SERVICE=worker
     container_name: backtesting_worker_prod
     profiles: ["prod"]
     env_file: .env
