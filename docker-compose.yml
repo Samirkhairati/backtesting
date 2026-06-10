@@ -100,5 +100,26 @@ services:
       migrations:
         condition: service_completed_successfully
 
+  client-dev:
+    build:
+      context: ./client
+      target: dev
+    container_name: backtesting_client_dev
+    profiles: ["dev"]
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+
+  client-prod:
+    build:
+      context: ./client
+      target: prod
+    container_name: backtesting_client_prod
+    profiles: ["prod"]
+    ports:
+      - "80:80"
+
 volumes:
   postgres_data:
