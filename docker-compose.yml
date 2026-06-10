@@ -2,7 +2,7 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: backtesting_postgres
-    profiles: ["dev", "prod"]
+    profiles: ["dev", "prod", "test"]
     env_file: .env.dev
     ports:
       - "5432:5432"
@@ -13,6 +13,18 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  migrations:
+    image: migrate/migrate
+    container_name: backtesting_migrations
+    profiles: ["dev", "prod", "test"]
+    env_file: .env.dev
+    volumes:
+      - ./core/db/migrations:/migrations
+    command: ["-path", "/migrations", "-database", "postgres://postgres:postgres@postgres:5432/backtesting?sslmode=disable", "up"]
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   api-dev:
     build:
@@ -71,6 +83,22 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  test:
+    build:
+      context: .
+      target: dev
+    container_name: backtesting_test
+    profiles: ["test"]
+    volumes:
+      - .:/app
+    env_file: .env.dev
+    command: sh -c "go mod tidy && go test ./... -v"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
 
 volumes:
   postgres_data:
