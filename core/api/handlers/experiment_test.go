@@ -20,7 +20,7 @@ func TestExperimentEndpoints(t *testing.T) {
 
 	r := router.SetupRouter(db)
 
-	token, _ := CreateTestUserAndLogin(t, r)
+	token, userID := CreateTestUserAndLogin(t, r)
 
 	var experimentID string
 
@@ -74,6 +74,7 @@ func TestExperimentEndpoints(t *testing.T) {
 
 		assert.Len(t, exps, 1)
 		assert.Equal(t, experimentID, exps[0].ID)
+		assert.Equal(t, userID, exps[0].UserID)
 		assert.Equal(t, "Test Experiment", exps[0].Name)
 	})
 
@@ -90,6 +91,7 @@ func TestExperimentEndpoints(t *testing.T) {
 		json.Unmarshal(w.Body.Bytes(), &exp)
 
 		assert.Equal(t, experimentID, exp.ID)
+		assert.Equal(t, userID, exp.UserID)
 		assert.Equal(t, "Test Experiment", exp.Name)
 	})
 

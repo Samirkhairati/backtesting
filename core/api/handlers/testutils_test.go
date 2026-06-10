@@ -65,5 +65,5 @@ func CreateTestUserAndLogin(t *testing.T, r *gin.Engine) (string, string) {
 	require.NoError(t, err)
 	require.NotEmpty(t, resp.Token)
 
-	return resp.Token, testUsername
+	return resp.Token, resp.User.ID
 }

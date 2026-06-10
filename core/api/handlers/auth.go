@@ -92,5 +92,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, models.AuthResponse{Token: token})
+	c.JSON(http.StatusOK, models.AuthResponse{
+		Token: token,
+		User:  user,
+	})
 }

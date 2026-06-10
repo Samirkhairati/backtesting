@@ -61,5 +61,7 @@ func TestAuthEndpoints(t *testing.T) {
 		var response models.AuthResponse
 		json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NotEmpty(t, response.Token)
+		assert.NotEmpty(t, response.User.ID)
+		assert.Equal(t, testUsername, response.User.Username)
 	})
 }
