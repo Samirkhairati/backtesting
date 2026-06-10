@@ -32,26 +32,26 @@ func SetupRouter(db *pgxpool.Pool) *gin.Engine {
 	})
 
 	authHandler := &handlers.AuthHandler{DB: db}
-	backtestHandler := &handlers.BacktestHandler{DB: db}
+	experimentHandler := &handlers.ExperimentHandler{DB: db}
 
-	// API Group Setup
+	// v1 API Routes
 	v1 := r.Group("/api/v1")
-
-	// Unsecured routes
-	authGroup := v1.Group("/auth")
 	{
-		authGroup.POST("/register", authHandler.Register)
-		authGroup.POST("/login", authHandler.Login)
-	}
+		// Public Routes
+		auth := v1.Group("/auth")
+		{
+			auth.POST("/register", authHandler.Register)
+			auth.POST("/login", authHandler.Login)
+		}
 
-	// Secured routes (Requires JWT)
-	protected := v1.Group("/")
-	protected.Use(middleware.RequireAuth())
-	{
-		// Backtest Management Endpoints
-		protected.POST("/backtests", backtestHandler.CreateBacktest)
-		protected.GET("/backtests", backtestHandler.GetBacktests)
-		protected.GET("/backtests/:id", backtestHandler.GetBacktestByID)
+		// Protected Routes
+		experiments := v1.Group("/experiments")
+		experiments.Use(middleware.RequireAuth())
+		{
+			experiments.POST("", experimentHandler.CreateExperiment)
+			experiments.GET("", experimentHandler.GetExperiments)
+			experiments.GET("/:id", experimentHandler.GetExperimentByID)
+		}
 	}
 
 	return r
