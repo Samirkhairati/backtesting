@@ -31,8 +31,8 @@ func SetupRouter(db *pgxpool.Pool) *gin.Engine {
 		})
 	})
 
-	// Handlers Initialization
 	authHandler := &handlers.AuthHandler{DB: db}
+	backtestHandler := &handlers.BacktestHandler{DB: db}
 
 	// API Group Setup
 	v1 := r.Group("/api/v1")
@@ -45,11 +45,14 @@ func SetupRouter(db *pgxpool.Pool) *gin.Engine {
 	}
 
 	// Secured routes (Requires JWT)
-	// protected := v1.Group("/")
-	// protected.Use(middleware.RequireAuth())
-	// {
-	//     // Future protected routes will go here (e.g. protected.POST("/backtests"))
-	// }
+	protected := v1.Group("/")
+	protected.Use(middleware.RequireAuth())
+	{
+		// Backtest Management Endpoints
+		protected.POST("/backtests", backtestHandler.CreateBacktest)
+		protected.GET("/backtests", backtestHandler.GetBacktests)
+		protected.GET("/backtests/:id", backtestHandler.GetBacktestByID)
+	}
 
 	return r
 }
