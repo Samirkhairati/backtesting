@@ -19,7 +19,7 @@ func TestAuthEndpoints(t *testing.T) {
 	db := SetupTestDB(t)
 	defer db.Close()
 
-	r := router.SetupRouter(db)
+	r := router.SetupRouter(db, nil)
 
 	// Generate random username to avoid conflicts
 	testUsername := "testuser_" + uuid.New().String()

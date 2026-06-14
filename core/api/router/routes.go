@@ -8,10 +8,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/samirkhairati/backtesting/core/api/handlers"
 	"github.com/samirkhairati/backtesting/core/api/middleware"
+	pb "github.com/samirkhairati/backtesting/core/proto/coordinator"
 )
 
 // SetupRouter initializes and configures the Gin router with all endpoints
-func SetupRouter(db *pgxpool.Pool) *gin.Engine {
+func SetupRouter(db *pgxpool.Pool, coordinatorClient pb.CoordinatorServiceClient) *gin.Engine {
 	r := gin.New()
 
 	// Apply global middleware
@@ -32,7 +33,10 @@ func SetupRouter(db *pgxpool.Pool) *gin.Engine {
 	})
 
 	authHandler := &handlers.AuthHandler{DB: db}
-	experimentHandler := &handlers.ExperimentHandler{DB: db}
+	experimentHandler := &handlers.ExperimentHandler{
+		DB:                db,
+		CoordinatorClient: coordinatorClient,
+	}
 
 	// v1 API Routes
 	v1 := r.Group("/api/v1")

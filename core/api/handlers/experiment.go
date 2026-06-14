@@ -4,15 +4,19 @@ import (
 	"context"
 	"net/http"
 
+	"encoding/json"
+
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/samirkhairati/backtesting/core/logger"
 	"github.com/samirkhairati/backtesting/core/models"
+	pb "github.com/samirkhairati/backtesting/core/proto/coordinator"
 	"go.uber.org/zap"
 )
 
 type ExperimentHandler struct {
-	DB *pgxpool.Pool
+	DB                *pgxpool.Pool
+	CoordinatorClient pb.CoordinatorServiceClient
 }
 
 // CreateExperiment creates a new pending experiment
@@ -26,26 +30,31 @@ func (h *ExperimentHandler) CreateExperiment(c *gin.Context) {
 		return
 	}
 
-	var experimentID string
-	err := h.DB.QueryRow(
-		context.Background(),
-		"INSERT INTO experiments (user_id, name, description, config, status) VALUES ($1, $2, $3, $4, 'PENDING') RETURNING id",
-		userID,
-		req.Name,
-		req.Description,
-		req,
-	).Scan(&experimentID)
-
+	configJSONBytes, err := json.Marshal(req)
 	if err != nil {
-		logger.Log.Error("Failed to insert experiment", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create experiment"})
+		logger.Log.Error("Failed to marshal experiment config", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process experiment configuration"})
+		return
+	}
+
+	grpcReq := &pb.CreateExperimentRequest{
+		UserId:      userID,
+		Name:        req.Name,
+		Description: req.Description,
+		ConfigJson:  string(configJSONBytes),
+	}
+
+	resp, err := h.CoordinatorClient.CreateExperiment(c.Request.Context(), grpcReq)
+	if err != nil {
+		logger.Log.Error("Failed to create experiment via Coordinator", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create experiment in coordinator"})
 		return
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
 		"message":       "Experiment created successfully",
-		"experiment_id": experimentID,
-		"status":        "PENDING",
+		"experiment_id": resp.ExperimentId,
+		"status":        resp.Status,
 	})
 }
 

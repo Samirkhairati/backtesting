@@ -2,6 +2,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
+import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -38,13 +39,21 @@ function Login() {
     },
   })
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    // This is just a mockup, so we just log
-    console.log(values)
+  const [isLoading, setIsLoading] = useState(false)
+
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    setIsLoading(true)
+    // Simulate API call for now
+    setTimeout(() => {
+      console.log(values)
+      setIsLoading(false)
+      // Wait for API to return token, then store and redirect
+      // router.navigate({ to: '/' })
+    }, 1500)
   }
 
   return (
-    <div className="w-full max-w-md animate-in fade-in zoom-in-95 duration-500">
+    <div className="flex flex-col items-center justify-center min-h-[80vh] p-4 animate-in fade-in zoom-in-95 duration-700">
       <Card className="border-primary/20">
         <CardHeader className="space-y-1">
           <div className="flex items-center gap-2 mb-2">
@@ -65,7 +74,7 @@ function Login() {
                   <FormItem>
                     <FormLabel className="font-mono uppercase text-xs text-muted-foreground">Username</FormLabel>
                     <FormControl>
-                      <Input placeholder="admin" {...field} />
+                      <Input placeholder="admin" disabled={isLoading} {...field} />
                     </FormControl>
                     <FormMessage className="font-mono text-xs" />
                   </FormItem>
@@ -78,15 +87,22 @@ function Login() {
                   <FormItem>
                     <FormLabel className="font-mono uppercase text-xs text-muted-foreground">Password</FormLabel>
                     <FormControl>
-                      <Input type="password" placeholder="••••••••" {...field} />
+                      <Input type="password" placeholder="••••••••" disabled={isLoading} {...field} />
                     </FormControl>
                     <FormMessage className="font-mono text-xs" />
                   </FormItem>
                 )}
               />
               <div className="pt-2">
-                <Button type="submit" variant="glow" className="w-full font-mono uppercase tracking-widest">
-                  Login
+                <Button type="submit" variant="glow" disabled={isLoading} className="w-full font-mono uppercase tracking-widest relative">
+                  {isLoading ? (
+                    <div className="flex items-center gap-2">
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent" />
+                      Authenticating...
+                    </div>
+                  ) : (
+                    "Login"
+                  )}
                 </Button>
               </div>
             </form>

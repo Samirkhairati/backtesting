@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package coordinator;
+
+option go_package = "github.com/samirkhairati/backtesting/core/proto/coordinator";
+
+service CoordinatorService {
+  rpc CreateExperiment(CreateExperimentRequest) returns (CreateExperimentResponse);
+}
+
+message CreateExperimentRequest {
+  string user_id = 1;
+  string name = 2;
+  string description = 3;
+  // Send config as a JSON string to keep it generic since it's stored as JSONB
+  string config_json = 4;
+}
+
+message CreateExperimentResponse {
+  string experiment_id = 1;
+  string status = 2;
+}

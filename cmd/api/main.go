@@ -8,6 +8,9 @@ import (
 	"github.com/samirkhairati/backtesting/core/db"
 	"github.com/samirkhairati/backtesting/core/logger"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	pb "github.com/samirkhairati/backtesting/core/proto/coordinator"
 )
 
 func main() {
@@ -15,9 +18,11 @@ func main() {
 	logger.Init()
 	defer logger.Sync()
 
-	port := os.Getenv("API_CONTAINER_PORT")
-	if port == "" {
-		logger.Log.Fatal("API_CONTAINER_PORT environment variable is not set")
+	port := "8080"
+
+	coordinatorAddr := os.Getenv("COORDINATOR_ADDR")
+	if coordinatorAddr == "" {
+		logger.Log.Fatal("COORDINATOR_ADDR environment variable is not set")
 	}
 
 	logger.Log.Sugar().Infof("Starting API Server on port %s...", port)
@@ -26,7 +31,15 @@ func main() {
 	dbPool := db.Setup(ctx)
 	defer dbPool.Close()
 
-	r := router.SetupRouter(dbPool)
+	// Set up a connection to the Coordinator gRPC server.
+	conn, err := grpc.NewClient(coordinatorAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		logger.Log.Fatal("did not connect to coordinator", zap.Error(err))
+	}
+	defer conn.Close()
+	coordinatorClient := pb.NewCoordinatorServiceClient(conn)
+
+	r := router.SetupRouter(dbPool, coordinatorClient)
 
 	if err := r.Run(":" + port); err != nil {
 		logger.Log.Fatal("Failed to start API server", zap.Error(err))
