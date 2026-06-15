@@ -11,6 +11,8 @@ import (
 	"github.com/samirkhairati/backtesting/core/models"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
+	"errors"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type AuthHandler struct {
@@ -44,9 +46,14 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	).Scan(&userID)
 
 	if err != nil {
-		logger.Log.Warn("Failed to create user (likely duplicate)", zap.Error(err))
-		// In a real app, you'd check if err is specifically a unique constraint violation
-		c.JSON(http.StatusConflict, gin.H{"error": "Username might already exist"})
+		logger.Log.Error("Database error during registration", zap.Error(err))
+		
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			c.JSON(http.StatusConflict, gin.H{"error": "Username might already exist"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user account"})
+		}
 		return
 	}
 

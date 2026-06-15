@@ -3,6 +3,8 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { useState } from 'react'
+import { login } from '@/lib/api'
+import { useNavigate } from '@tanstack/react-router'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -39,17 +41,26 @@ function Login() {
     },
   })
 
+  const navigate = useNavigate()
   const [isLoading, setIsLoading] = useState(false)
+  const [errorMsg, setErrorMsg] = useState('')
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setIsLoading(true)
-    // Simulate API call for now
-    setTimeout(() => {
-      console.log(values)
+    setErrorMsg('')
+    try {
+      const data = await login({ username: values.username, password: values.password })
+      if (data.token) {
+        localStorage.setItem('token', data.token)
+        navigate({ to: '/' })
+      } else {
+        setErrorMsg('Login failed: No token received')
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'An unexpected error occurred')
+    } finally {
       setIsLoading(false)
-      // Wait for API to return token, then store and redirect
-      // router.navigate({ to: '/' })
-    }, 1500)
+    }
   }
 
   return (
@@ -105,6 +116,11 @@ function Login() {
                   )}
                 </Button>
               </div>
+              {errorMsg && (
+                <div className="text-red-500 font-mono text-xs text-center mt-2">
+                  {errorMsg}
+                </div>
+              )}
             </form>
           </Form>
         </CardContent>

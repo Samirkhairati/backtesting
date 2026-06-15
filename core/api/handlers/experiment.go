@@ -96,7 +96,7 @@ func (h *ExperimentHandler) GetExperiments(c *gin.Context) {
 		experiments = []models.Experiment{}
 	}
 
-	c.JSON(http.StatusOK, experiments)
+	c.JSON(http.StatusOK, gin.H{"experiments": experiments})
 }
 
 // GetExperimentByID returns a specific experiment if it belongs to the authenticated user

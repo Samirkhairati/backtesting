@@ -106,7 +106,7 @@ func TestServer_CreateExperiment_Integration(t *testing.T) {
 	}
 
 	req := &pb.CreateExperimentRequest{
-		UserId:      "test-user-id", // Note: Foreign key constraints might fail if this user doesn't exist
+		UserId:      "00000000-0000-0000-0000-000000000000", // Note: Foreign key constraints might fail if this user doesn't exist
 		Name:        "Integration Exp",
 		Description: "Integration Test",
 		ConfigJson:  `{"param": "val"}`,

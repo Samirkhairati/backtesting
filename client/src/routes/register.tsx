@@ -3,6 +3,8 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { useState } from 'react'
+import { register, login } from '@/lib/api'
+import { useNavigate } from '@tanstack/react-router'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -44,17 +46,27 @@ function Register() {
     },
   })
 
+  const navigate = useNavigate()
   const [isLoading, setIsLoading] = useState(false)
+  const [errorMsg, setErrorMsg] = useState('')
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setIsLoading(true)
-    // Simulate API call for now
-    setTimeout(() => {
-      console.log(values)
+    setErrorMsg('')
+    try {
+      // First register the user
+      await register({ username: values.username, password: values.password })
+      // Then automatically log them in
+      const data = await login({ username: values.username, password: values.password })
+      if (data.token) {
+        localStorage.setItem('token', data.token)
+        navigate({ to: '/' })
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Registration failed')
+    } finally {
       setIsLoading(false)
-      // Wait for API to return token, then store and redirect
-      // router.navigate({ to: '/' })
-    }, 1500)
+    }
   }
 
   return (
@@ -123,6 +135,11 @@ function Register() {
                   )}
                 </Button>
               </div>
+              {errorMsg && (
+                <div className="text-red-500 font-mono text-xs text-center mt-2">
+                  {errorMsg}
+                </div>
+              )}
             </form>
           </Form>
         </CardContent>

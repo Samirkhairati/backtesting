@@ -141,6 +141,17 @@ services:
       - ./client:/app
       - /app/node_modules
 
+  client-test:
+    build:
+      context: ./client
+      target: dev
+    container_name: backtesting_client_test
+    profiles: ["test"]
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+    command: sh -c "pnpm run lint && pnpm run build"
+
   client-prod:
     build:
       context: ./client

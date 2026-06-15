@@ -37,6 +37,7 @@ func SetupRouter(db *pgxpool.Pool, coordinatorClient pb.CoordinatorServiceClient
 		DB:                db,
 		CoordinatorClient: coordinatorClient,
 	}
+	dataHandler := &handlers.DataHandler{DB: db}
 
 	// v1 API Routes
 	v1 := r.Group("/api/v1")
@@ -55,6 +56,12 @@ func SetupRouter(db *pgxpool.Pool, coordinatorClient pb.CoordinatorServiceClient
 			experiments.POST("", experimentHandler.CreateExperiment)
 			experiments.GET("", experimentHandler.GetExperiments)
 			experiments.GET("/:id", experimentHandler.GetExperimentByID)
+		}
+
+		data := v1.Group("/data")
+		data.Use(middleware.RequireAuth())
+		{
+			data.GET("/symbols", dataHandler.GetSymbols)
 		}
 	}
 
