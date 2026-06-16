@@ -25,7 +25,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { createExperiment, fetchSymbols } from '@/lib/api'
+import { createExperiment, searchSymbols } from '@/lib/api'
+import React from 'react'
 
 export const Route = createFileRoute('/create')({
   component: CreateExperiment,
@@ -53,10 +54,19 @@ function CreateExperiment() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
-  // Fetch available symbols from the DB
-  const { data: symbols, isLoading: isLoadingSymbols } = useQuery({
-    queryKey: ['symbols'],
-    queryFn: fetchSymbols,
+  const [searchTerm, setSearchTerm] = React.useState('')
+  const [debouncedSearch, setDebouncedSearch] = React.useState('')
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchTerm), 300)
+    return () => clearTimeout(timer)
+  }, [searchTerm])
+
+  // Fetch available symbols from the search API
+  const { data: searchResults, isLoading: isLoadingSymbols } = useQuery({
+    queryKey: ['symbols', debouncedSearch],
+    queryFn: () => searchSymbols(debouncedSearch),
+    enabled: debouncedSearch.length > 0,
   })
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -161,10 +171,11 @@ function CreateExperiment() {
                       <FormLabel className="font-mono uppercase text-xs text-muted-foreground">Asset Symbols</FormLabel>
                       <FormControl>
                         <MultiSelect
-                          options={symbols?.map((sym: string) => ({ label: sym, value: sym })) || []}
+                          options={searchResults?.map((sym: { symbol: string, name: string }) => ({ label: `${sym.symbol} - ${sym.name}`, value: sym.symbol })) || []}
                           selected={field.value}
                           onChange={field.onChange}
-                          placeholder={isLoadingSymbols ? "Loading..." : "Select stocks"}
+                          onSearch={setSearchTerm}
+                          placeholder={isLoadingSymbols ? "Searching..." : "Type to search stocks"}
                         />
                       </FormControl>
                       <FormMessage className="font-mono text-xs" />
@@ -220,11 +231,10 @@ function CreateExperiment() {
                           <Calendar
                             mode="single"
                             selected={field.value ? new Date(field.value + "T12:00:00Z") : undefined}
-                            onSelect={(date) => field.onChange(date ? format(date, 'yyyy-MM-dd') : '')}
-                            disabled={(date) =>
+                            onSelect={(date: Date | undefined) => field.onChange(date ? format(date, 'yyyy-MM-dd') : '')}
+                            disabled={(date: Date) =>
                               date > new Date() || date < new Date("1900-01-01")
                             }
-                            initialFocus
                           />
                         </PopoverContent>
                       </Popover>
@@ -262,11 +272,10 @@ function CreateExperiment() {
                           <Calendar
                             mode="single"
                             selected={field.value ? new Date(field.value + "T12:00:00Z") : undefined}
-                            onSelect={(date) => field.onChange(date ? format(date, 'yyyy-MM-dd') : '')}
-                            disabled={(date) =>
+                            onSelect={(date: Date | undefined) => field.onChange(date ? format(date, 'yyyy-MM-dd') : '')}
+                            disabled={(date: Date) =>
                               date > new Date() || date < new Date("1900-01-01")
                             }
-                            initialFocus
                           />
                         </PopoverContent>
                       </Popover>

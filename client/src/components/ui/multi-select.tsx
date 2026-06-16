@@ -27,6 +27,7 @@ interface MultiSelectProps {
   options: OptionType[]
   selected: string[]
   onChange: (value: string[]) => void
+  onSearch?: (value: string) => void
   placeholder?: string
   emptyText?: string
 }
@@ -35,6 +36,7 @@ export function MultiSelect({
   options,
   selected,
   onChange,
+  onSearch,
   placeholder = "Select items...",
   emptyText = "No results found.",
 }: MultiSelectProps) {
@@ -44,7 +46,10 @@ export function MultiSelect({
     onChange(selected.filter((i) => i !== item))
   }
 
-  const selectedOptions = selected.map((s) => options.find((o) => o.value === s)).filter(Boolean) as OptionType[]
+  const selectedOptions = selected.map((s) => {
+    const found = options.find((o) => o.value === s)
+    return found || { label: s, value: s }
+  })
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -95,8 +100,8 @@ export function MultiSelect({
         </div>
       </PopoverTrigger>
       <PopoverContent className="w-full p-0">
-        <Command>
-          <CommandInput placeholder="Search..." />
+        <Command shouldFilter={!onSearch}>
+          <CommandInput placeholder="Search..." onValueChange={onSearch} />
           <CommandList>
             <CommandEmpty>{emptyText}</CommandEmpty>
             <CommandGroup>

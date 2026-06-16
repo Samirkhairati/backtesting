@@ -101,8 +101,11 @@ func TestExperimentEndpoints_Mocked(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
-		var exps []models.Experiment
-		json.Unmarshal(w.Body.Bytes(), &exps)
+		var resp struct {
+			Experiments []models.Experiment `json:"experiments"`
+		}
+		json.Unmarshal(w.Body.Bytes(), &resp)
+		exps := resp.Experiments
 
 		require.Len(t, exps, 1)
 		assert.Equal(t, experimentID, exps[0].ID)
@@ -195,7 +198,7 @@ func TestExperimentEndpoints_Integration(t *testing.T) {
 
 		experimentID = resp["experiment_id"].(string)
 		assert.NotEmpty(t, experimentID)
-		assert.Equal(t, "PENDING", resp["status"])
+		assert.Equal(t, "PENDING_INGESTION", resp["status"])
 	})
 
 	// NO MANUAL INSERT NEEDED! The real coordinator wrote it to the database!
@@ -209,8 +212,11 @@ func TestExperimentEndpoints_Integration(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
-		var exps []models.Experiment
-		json.Unmarshal(w.Body.Bytes(), &exps)
+		var resp struct {
+			Experiments []models.Experiment `json:"experiments"`
+		}
+		json.Unmarshal(w.Body.Bytes(), &resp)
+		exps := resp.Experiments
 
 		require.Len(t, exps, 1)
 		assert.Equal(t, experimentID, exps[0].ID)

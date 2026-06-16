@@ -56,8 +56,12 @@ function Login() {
       } else {
         setErrorMsg('Login failed: No token received')
       }
-    } catch (err: any) {
-      setErrorMsg(err.message || 'An unexpected error occurred')
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setErrorMsg(err.message)
+      } else {
+        setErrorMsg('An unexpected error occurred')
+      }
     } finally {
       setIsLoading(false)
     }

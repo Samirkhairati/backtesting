@@ -62,6 +62,7 @@ func SetupRouter(db *pgxpool.Pool, coordinatorClient pb.CoordinatorServiceClient
 		data.Use(middleware.RequireAuth())
 		{
 			data.GET("/symbols", dataHandler.GetSymbols)
+			data.GET("/symbols/search", dataHandler.SearchSymbols)
 		}
 	}
 

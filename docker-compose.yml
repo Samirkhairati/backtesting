@@ -129,6 +129,35 @@ services:
       postgres:
         condition: service_healthy
 
+  ingestion-dev:
+    build:
+      context: .
+      dockerfile: ./ingestion/Dockerfile
+      target: dev
+    container_name: backtesting_ingestion_dev
+    profiles: ["dev"]
+    ports:
+      - "${INGESTION_HOST_PORT}:50052"
+    volumes:
+      - ./ingestion:/app
+      - ./core/proto:/app/core/proto
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  ingestion-prod:
+    build:
+      context: .
+      dockerfile: ./ingestion/Dockerfile
+      target: prod
+    container_name: backtesting_ingestion_prod
+    profiles: ["prod"]
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   client-dev:
     build:
       context: ./client
@@ -147,10 +176,12 @@ services:
       target: dev
     container_name: backtesting_client_test
     profiles: ["test"]
+    environment:
+      - CI=true
     volumes:
       - ./client:/app
       - /app/node_modules
-    command: sh -c "pnpm run lint && pnpm run build"
+    command: sh -c "pnpm install && pnpm run lint && pnpm run build"
 
   client-prod:
     build:

@@ -62,8 +62,12 @@ function Register() {
         localStorage.setItem('token', data.token)
         navigate({ to: '/' })
       }
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Registration failed')
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setErrorMsg(err.message)
+      } else {
+        setErrorMsg('An unexpected error occurred')
+      }
     } finally {
       setIsLoading(false)
     }

@@ -14,8 +14,10 @@ import (
 	"github.com/samirkhairati/backtesting/core/db"
 	"github.com/samirkhairati/backtesting/core/logger"
 	pb "github.com/samirkhairati/backtesting/core/proto/coordinator"
+	ingestionpb "github.com/samirkhairati/backtesting/core/proto/ingestion"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
 )
 
@@ -41,9 +43,27 @@ func main() {
 
 	grpcServer := grpc.NewServer()
 	
+	ingestionUrl := os.Getenv("INGESTION_SERVICE_URL")
+	if ingestionUrl == "" {
+		ingestionUrl = "ingestion-dev:50052"
+	}
+	
+	conn, err := grpc.NewClient(ingestionUrl, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		logger.Log.Warn("Could not connect to Ingestion service", zap.Error(err))
+	} else {
+		defer conn.Close()
+	}
+
+	var ingestionClient ingestionpb.IngestionServiceClient
+	if conn != nil {
+		ingestionClient = ingestionpb.NewIngestionServiceClient(conn)
+	}
+
 	// Register the coordinator service
 	coordinatorServer := &coordinator.Server{
 		DB: dbPool,
+		IngestionClient: ingestionClient,
 	}
 	pb.RegisterCoordinatorServiceServer(grpcServer, coordinatorServer)
 	

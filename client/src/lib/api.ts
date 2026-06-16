@@ -30,6 +30,18 @@ export async function fetchSymbols() {
   return data.symbols;
 }
 
+export async function searchSymbols(query: string) {
+  if (!query) return [];
+  const res = await fetch(`${API_URL}/data/symbols/search?q=${encodeURIComponent(query)}`, {
+    headers: getHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error("Failed to search symbols");
+  }
+  const data = await res.json();
+  return data.symbols;
+}
+
 export async function createExperiment(payload: Record<string, unknown>) {
   const res = await fetch(`${API_URL}/experiments`, {
     method: "POST",

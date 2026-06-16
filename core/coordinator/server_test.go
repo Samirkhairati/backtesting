@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	pb "github.com/samirkhairati/backtesting/core/proto/coordinator"
 	"github.com/samirkhairati/backtesting/core/logger"
 	"github.com/samirkhairati/backtesting/core/db"
@@ -33,6 +34,10 @@ type mockDB struct {
 
 func (m *mockDB) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
 	return m.row
+}
+
+func (m *mockDB) Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, nil
 }
 
 func TestServer_CreateExperiment_Unit(t *testing.T) {

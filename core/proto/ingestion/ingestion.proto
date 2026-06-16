@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package ingestion;
+
+option go_package = "github.com/samirkhairati/backtesting/core/proto/ingestion";
+
+service IngestionService {
+  rpc IngestData(IngestDataRequest) returns (IngestDataResponse);
+}
+
+message IngestDataRequest {
+  string experiment_id = 1;
+  repeated string symbols = 2;
+  string start_date = 3; // YYYY-MM-DD
+  string end_date = 4;   // YYYY-MM-DD
+}
+
+message IngestDataResponse {
+  bool success = 1;
+}
