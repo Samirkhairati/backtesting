@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"encoding/json"
 
@@ -28,6 +29,27 @@ func (h *ExperimentHandler) CreateExperiment(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+
+	for _, tf := range req.Timeframes {
+		start, err := time.Parse(time.RFC3339, tf.Start)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid start date format"})
+			return
+		}
+		end, err := time.Parse(time.RFC3339, tf.End)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid end date format"})
+			return
+		}
+		if start.After(end) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Start date must be before end date"})
+			return
+		}
+		if end.Sub(start).Hours() < 24*28 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Timeframe must be at least 1 month long (28 days)"})
+			return
+		}
 	}
 
 	configJSONBytes, err := json.Marshal(req)

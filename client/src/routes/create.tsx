@@ -39,6 +39,22 @@ const formSchema = z.object({
   strategies: z.array(z.string()).min(1, 'Please select at least one strategy.'),
   startDate: z.string().min(1, 'Start date is required.'),
   endDate: z.string().min(1, 'End date is required.'),
+}).refine(data => {
+  const start = new Date(data.startDate);
+  const end = new Date(data.endDate);
+  return start < end;
+}, {
+  message: "End date must be after start date.",
+  path: ["endDate"]
+}).refine(data => {
+  const start = new Date(data.startDate);
+  const end = new Date(data.endDate);
+  const diffTime = Math.abs(end.getTime() - start.getTime());
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+  return diffDays >= 28;
+}, {
+  message: "Timeframe must be at least 1 month long.",
+  path: ["endDate"]
 })
 
 // Hardcoded supported strategies for the MVP
@@ -230,6 +246,9 @@ function CreateExperiment() {
                         <PopoverContent className="w-auto p-0" align="start">
                           <Calendar
                             mode="single"
+                            captionLayout="dropdown"
+                            fromYear={1990}
+                            toYear={new Date().getFullYear()}
                             selected={field.value ? new Date(field.value + "T12:00:00Z") : undefined}
                             onSelect={(date: Date | undefined) => field.onChange(date ? format(date, 'yyyy-MM-dd') : '')}
                             disabled={(date: Date) =>
@@ -271,6 +290,9 @@ function CreateExperiment() {
                         <PopoverContent className="w-auto p-0" align="start">
                           <Calendar
                             mode="single"
+                            captionLayout="dropdown"
+                            fromYear={1990}
+                            toYear={new Date().getFullYear()}
                             selected={field.value ? new Date(field.value + "T12:00:00Z") : undefined}
                             onSelect={(date: Date | undefined) => field.onChange(date ? format(date, 'yyyy-MM-dd') : '')}
                             disabled={(date: Date) =>
