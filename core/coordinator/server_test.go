@@ -78,9 +78,7 @@ func TestServer_CreateExperiment_Unit(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &Server{
-				DB: &mockDB{row: tt.mockRow},
-			}
+			s := NewServer(&mockDB{row: tt.mockRow}, nil)
 
 			resp, err := s.CreateExperiment(context.Background(), tt.req)
 			if (err != nil) != tt.wantErr {
@@ -106,9 +104,7 @@ func TestServer_CreateExperiment_Integration(t *testing.T) {
 	dbPool := db.Setup(ctx)
 	defer dbPool.Close()
 
-	s := &Server{
-		DB: dbPool,
-	}
+	s := NewServer(dbPool, nil)
 
 	req := &pb.CreateExperimentRequest{
 		UserId:      "00000000-0000-0000-0000-000000000000", // Note: Foreign key constraints might fail if this user doesn't exist

@@ -144,7 +144,7 @@ func TestExperimentEndpoints_Integration(t *testing.T) {
 	require.NoError(t, err)
 
 	grpcServer := grpc.NewServer()
-	coordServer := &coordinator.Server{DB: db}
+	coordServer := coordinator.NewServer(db, nil)
 	pb.RegisterCoordinatorServiceServer(grpcServer, coordServer)
 
 	go func() {

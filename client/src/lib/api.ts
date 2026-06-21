@@ -19,6 +19,17 @@ export async function fetchExperiments() {
   return res.json();
 }
 
+export async function fetchExperimentById(id: string) {
+  const res = await fetch(`${API_URL}/experiments/${id}`, {
+    headers: getHeaders(),
+  });
+  if (!res.ok) {
+    if (res.status === 401) throw new Error("Unauthorized");
+    throw new Error("Failed to fetch experiment");
+  }
+  return res.json();
+}
+
 export async function fetchSymbols() {
   const res = await fetch(`${API_URL}/data/symbols`, {
     headers: getHeaders(),

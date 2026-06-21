@@ -30,4 +30,10 @@ type Experiment struct {
 	Config      CreateExperimentRequest `json:"config"`
 	Status      ExperimentStatus        `json:"status"`
 	CreatedAt   time.Time               `json:"created_at"`
+	StatusLogs  []ExperimentStatusLog   `json:"status_logs,omitempty"`
+}
+
+type ExperimentStatusLog struct {
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
 }

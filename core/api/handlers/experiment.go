@@ -147,5 +147,25 @@ func (h *ExperimentHandler) GetExperimentByID(c *gin.Context) {
 		return
 	}
 
+	// Fetch status logs
+	logRows, err := h.DB.Query(
+		context.Background(),
+		"SELECT status, created_at FROM experiment_status_logs WHERE experiment_id = $1 ORDER BY created_at ASC",
+		expID,
+	)
+	if err == nil {
+		defer logRows.Close()
+		var logs []models.ExperimentStatusLog
+		for logRows.Next() {
+			var log models.ExperimentStatusLog
+			if err := logRows.Scan(&log.Status, &log.CreatedAt); err == nil {
+				logs = append(logs, log)
+			}
+		}
+		exp.StatusLogs = logs
+	} else {
+		logger.Log.Error("Failed to query status logs", zap.Error(err))
+	}
+
 	c.JSON(http.StatusOK, exp)
 }

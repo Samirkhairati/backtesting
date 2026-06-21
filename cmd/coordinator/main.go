@@ -58,10 +58,7 @@ func main() {
 	defer producer.Close()
 
 	// Register the coordinator service
-	coordinatorServer := &coordinator.Server{
-		DB:       dbPool,
-		Producer: producer,
-	}
+	coordinatorServer := coordinator.NewServer(dbPool, producer)
 	pb.RegisterCoordinatorServiceServer(grpcServer, coordinatorServer)
 	
 	// Register reflection service on gRPC server

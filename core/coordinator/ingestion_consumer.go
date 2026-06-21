@@ -11,7 +11,7 @@ import (
 )
 
 type IngestionConsumer struct {
-	DB       DBQuerier
+	Repo     *ExperimentRepository
 	Producer kafka.Publisher
 	consumer *kafka.Consumer
 }
@@ -21,8 +21,9 @@ func NewIngestionConsumer(brokers []string, db DBQuerier, producer kafka.Publish
 	if err != nil {
 		return nil, err
 	}
+	repo := NewExperimentRepository(db)
 	return &IngestionConsumer{
-		DB:       db,
+		Repo:     repo,
 		Producer: producer,
 		consumer: consumer,
 	}, nil
@@ -43,13 +44,11 @@ func (ic *IngestionConsumer) handle(ctx context.Context, record *kgo.Record) err
 		return nil // Do not retry malformed messages
 	}
 
-	_, err := ic.DB.Exec(ctx, "UPDATE ingestion_jobs SET status=$1, completed_at=CURRENT_TIMESTAMP WHERE id=$2", msg.Status, msg.JobID)
-	if err != nil {
+	if err := ic.Repo.UpdateIngestionJobStatus(ctx, msg.JobID, msg.Status); err != nil {
 		return err
 	}
 
-	var pending, total int
-	err = ic.DB.QueryRow(ctx, "SELECT COUNT(*) FILTER (WHERE status='PENDING'), COUNT(*) FROM ingestion_jobs WHERE experiment_id=$1", msg.ExperimentID).Scan(&pending, &total)
+	pending, total, err := ic.Repo.GetIngestionJobCounts(ctx, msg.ExperimentID)
 	if err != nil {
 		return err
 	}
@@ -65,8 +64,7 @@ func (ic *IngestionConsumer) handle(ctx context.Context, record *kgo.Record) err
 	})
 
 	if pending == 0 {
-		_, err = ic.DB.Exec(ctx, "UPDATE experiments SET status=$2 WHERE id=$1", msg.ExperimentID, models.ExperimentStatusIngested)
-		if err != nil {
+		if err := ic.Repo.UpdateExperimentStatus(ctx, msg.ExperimentID, models.ExperimentStatusIngested); err != nil {
 			return err
 		}
 		ic.Producer.Publish(ctx, "event-stream", msg.ExperimentID, models.ExperimentEvent{
