@@ -247,8 +247,8 @@ function CreateExperiment() {
                           <Calendar
                             mode="single"
                             captionLayout="dropdown"
-                            fromYear={1990}
-                            toYear={new Date().getFullYear()}
+                            startMonth={new Date(1990, 0)}
+                            endMonth={new Date()}
                             selected={field.value ? new Date(field.value + "T12:00:00Z") : undefined}
                             onSelect={(date: Date | undefined) => field.onChange(date ? format(date, 'yyyy-MM-dd') : '')}
                             disabled={(date: Date) =>
@@ -291,8 +291,8 @@ function CreateExperiment() {
                           <Calendar
                             mode="single"
                             captionLayout="dropdown"
-                            fromYear={1990}
-                            toYear={new Date().getFullYear()}
+                            startMonth={new Date(1990, 0)}
+                            endMonth={new Date()}
                             selected={field.value ? new Date(field.value + "T12:00:00Z") : undefined}
                             onSelect={(date: Date | undefined) => field.onChange(date ? format(date, 'yyyy-MM-dd') : '')}
                             disabled={(date: Date) =>
