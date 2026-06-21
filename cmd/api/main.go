@@ -2,15 +2,20 @@ package main
 
 import (
 	"context"
+	"net/http"
 	"os"
+	"os/signal"
+	"strings"
+	"syscall"
 
+	"github.com/samirkhairati/backtesting/core/api/handlers"
 	"github.com/samirkhairati/backtesting/core/api/router"
 	"github.com/samirkhairati/backtesting/core/db"
 	"github.com/samirkhairati/backtesting/core/logger"
+	pb "github.com/samirkhairati/backtesting/core/proto/coordinator"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	pb "github.com/samirkhairati/backtesting/core/proto/coordinator"
 )
 
 func main() {
@@ -39,9 +44,39 @@ func main() {
 	defer conn.Close()
 	coordinatorClient := pb.NewCoordinatorServiceClient(conn)
 
-	r := router.SetupRouter(dbPool, coordinatorClient)
-
-	if err := r.Run(":" + port); err != nil {
-		logger.Log.Fatal("Failed to start API server", zap.Error(err))
+	kafkaBrokersStr := os.Getenv("KAFKA_BROKERS")
+	if kafkaBrokersStr == "" {
+		kafkaBrokersStr = "kafka:9092"
 	}
+	kafkaBrokers := strings.Split(kafkaBrokersStr, ",")
+
+	bus := handlers.NewEventBus()
+	streamConsumer, err := handlers.NewEventStreamConsumer(kafkaBrokers, bus)
+	if err != nil {
+		logger.Log.Fatal("Failed to start event stream consumer", zap.Error(err))
+	}
+	
+	appCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	go streamConsumer.Run(appCtx)
+
+	r := router.SetupRouter(dbPool, coordinatorClient, bus)
+
+	srv := &http.Server{
+		Addr:    ":" + port,
+		Handler: r,
+	}
+
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Log.Fatal("Failed to start API server", zap.Error(err))
+		}
+	}()
+
+	<-appCtx.Done()
+	logger.Log.Info("Shutting down API gracefully...")
+	
+	streamConsumer.Close()
+	srv.Shutdown(context.Background())
 }

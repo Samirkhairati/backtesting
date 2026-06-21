@@ -1,0 +1,32 @@
+package models
+
+// ExperimentStatus defines the possible states of an experiment
+type ExperimentStatus string
+
+const (
+	ExperimentStatusPending          ExperimentStatus = "PENDING"
+	ExperimentStatusPendingIngestion ExperimentStatus = "PENDING_INGESTION"
+	ExperimentStatusReady            ExperimentStatus = "READY"
+	ExperimentStatusIngested         ExperimentStatus = "INGESTED"
+	ExperimentStatusRunning          ExperimentStatus = "RUNNING"
+	ExperimentStatusCompleted        ExperimentStatus = "COMPLETED"
+	ExperimentStatusFailed           ExperimentStatus = "FAILED"
+)
+
+// IngestionJobStatus defines the possible states of an ingestion job
+type IngestionJobStatus string
+
+const (
+	IngestionJobStatusPending   IngestionJobStatus = "PENDING"
+	IngestionJobStatusCompleted IngestionJobStatus = "COMPLETED"
+	IngestionJobStatusFailed    IngestionJobStatus = "FAILED"
+)
+
+// EventType defines the possible types of events published to the event-stream
+type EventType string
+
+const (
+	EventTypeIngestionStarted      EventType = "INGESTION_STARTED"
+	EventTypeIngestionJobCompleted EventType = "INGESTION_JOB_COMPLETED"
+	EventTypeIngestionCompleted    EventType = "INGESTION_COMPLETED"
+)

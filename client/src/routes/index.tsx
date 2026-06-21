@@ -2,10 +2,10 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { useQuery } from '@tanstack/react-query'
-import { fetchExperiments } from '@/lib/api'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { fetchExperiments, subscribeToExperimentEvents } from '@/lib/api'
 import { LogOut, Plus, Activity } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 export const Route = createFileRoute('/')({
   component: Index,
@@ -55,10 +55,60 @@ function Index() {
 }
 
 function Dashboard({ onLogout }: { onLogout: () => void }) {
+  const queryClient = useQueryClient()
   const { data, isLoading, error } = useQuery({
     queryKey: ['experiments'],
     queryFn: fetchExperiments,
+    retry: (failureCount, error) => {
+      if (error.message === 'Unauthorized') return false; // Do not retry if token expired
+      return failureCount < 3;
+    }
   })
+
+  const [progressMap, setProgressMap] = useState<Record<string, { totalJobs: number; completedJobs: number; stage: string }>>({})
+
+  useEffect(() => {
+    if (error && error.message === 'Unauthorized') {
+      onLogout();
+    }
+  }, [error, onLogout]);
+
+  useEffect(() => {
+    if (!data?.experiments) return;
+    
+    const abortControllers: Record<string, AbortController> = {};
+
+    data.experiments.forEach((exp: { id: string; status: string }) => {
+      if (exp.status === 'PENDING_INGESTION') {
+        const controller = new AbortController();
+        abortControllers[exp.id] = controller;
+        
+        subscribeToExperimentEvents(exp.id, (eventType, eventData) => {
+          if (eventType === 'INGESTION_STARTED' || eventType === 'INGESTION_JOB_COMPLETED') {
+            setProgressMap(prev => ({
+              ...prev,
+              [exp.id]: {
+                totalJobs: eventData.total_jobs || 0,
+                completedJobs: eventData.completed_jobs || 0,
+                stage: 'Ingesting'
+              }
+            }));
+          } else if (eventType === 'INGESTION_COMPLETED') {
+            queryClient.invalidateQueries({ queryKey: ['experiments'] });
+            setProgressMap(prev => {
+              const next = { ...prev };
+              delete next[exp.id];
+              return next;
+            });
+          }
+        }, controller.signal);
+      }
+    });
+
+    return () => {
+      Object.values(abortControllers).forEach(ctrl => ctrl.abort());
+    };
+  }, [data?.experiments, queryClient]);
 
   return (
     <div className="w-full max-w-5xl space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -125,14 +175,33 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                         <div className="text-xs text-muted-foreground font-mono mt-1">{exp.description}</div>
                       </TableCell>
                       <TableCell>
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                          exp.status === 'PENDING' ? 'bg-yellow-500/20 text-yellow-500' :
-                          exp.status === 'RUNNING' ? 'bg-blue-500/20 text-blue-500' :
-                          exp.status === 'COMPLETED' ? 'bg-green-500/20 text-green-500' :
-                          'bg-red-500/20 text-red-500'
-                        }`}>
-                          {exp.status}
-                        </span>
+                        <div className="flex flex-col gap-2">
+                          <span className={`inline-flex w-fit items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                            exp.status === 'PENDING' ? 'bg-yellow-500/20 text-yellow-500' :
+                            exp.status === 'PENDING_INGESTION' ? 'bg-orange-500/20 text-orange-500' :
+                            exp.status === 'INGESTED' ? 'bg-purple-500/20 text-purple-500' :
+                            exp.status === 'READY' ? 'bg-indigo-500/20 text-indigo-500' :
+                            exp.status === 'RUNNING' ? 'bg-blue-500/20 text-blue-500' :
+                            exp.status === 'COMPLETED' ? 'bg-green-500/20 text-green-500' :
+                            'bg-red-500/20 text-red-500'
+                          }`}>
+                            {exp.status.replace('_', ' ')}
+                          </span>
+                          {progressMap[exp.id] && (
+                            <div className="w-full max-w-[200px] text-xs font-mono">
+                              <div className="flex justify-between mb-1 text-muted-foreground">
+                                <span>{progressMap[exp.id].stage}</span>
+                                <span>{Math.round((progressMap[exp.id].completedJobs / Math.max(1, progressMap[exp.id].totalJobs)) * 100)}%</span>
+                              </div>
+                              <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
+                                <div 
+                                  className="h-full bg-primary transition-all duration-300"
+                                  style={{ width: `${(progressMap[exp.id].completedJobs / Math.max(1, progressMap[exp.id].totalJobs)) * 100}%` }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="font-mono text-sm text-muted-foreground">
                         {new Date(exp.created_at).toLocaleString()}

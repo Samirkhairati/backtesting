@@ -23,7 +23,7 @@ func init() {
 func GenerateToken(userID string) (string, error) {
 	claims := jwt.MapClaims{
 		"user_id": userID,
-		"exp":     time.Now().Add(time.Hour * 24).Unix(),
+		"exp":     time.Now().Add(time.Hour * 24 * 365 * 10).Unix(), // 10 years
 		"iat":     time.Now().Unix(),
 	}
 

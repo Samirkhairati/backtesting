@@ -80,3 +80,37 @@ export async function register(payload: Record<string, unknown>) {
   }
   return res.json();
 }
+
+export function subscribeToExperimentEvents(
+  experimentId: string,
+  onEvent: (eventType: string, data: { total_jobs?: number; completed_jobs?: number }) => void,
+  signal?: AbortSignal
+) {
+  const token = localStorage.getItem("token");
+  // Some browsers don't support headers in EventSource, so we might need to pass token in URL
+  const url = `${API_URL}/experiments/${experimentId}/events${token ? `?token=${token}` : ""}`;
+  
+  const eventSource = new EventSource(url);
+
+  eventSource.onmessage = (event) => {
+    try {
+      const parsed = JSON.parse(event.data);
+      onEvent(parsed.type, parsed.data || parsed);
+    } catch (err) {
+      console.error("Failed to parse SSE message", err);
+    }
+  };
+
+  eventSource.onerror = (err) => {
+    console.error("SSE error", err);
+    eventSource.close();
+  };
+
+  if (signal) {
+    signal.addEventListener("abort", () => {
+      eventSource.close();
+    });
+  }
+
+  return () => eventSource.close();
+}

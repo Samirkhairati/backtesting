@@ -43,7 +43,7 @@ func TestExperimentEndpoints_Mocked(t *testing.T) {
 	defer db.Close()
 
 	mockClient := &mockCoordinatorClient{}
-	r := router.SetupRouter(db, mockClient)
+	r := router.SetupRouter(db, mockClient, nil)
 
 	token, userID := CreateTestUserAndLogin(t, r)
 
@@ -160,7 +160,7 @@ func TestExperimentEndpoints_Integration(t *testing.T) {
 	realClient := pb.NewCoordinatorServiceClient(conn)
 
 	// 3. Mount the API with the REAL client
-	r := router.SetupRouter(db, realClient)
+	r := router.SetupRouter(db, realClient, nil)
 
 	token, userID := CreateTestUserAndLogin(t, r)
 	var experimentID string

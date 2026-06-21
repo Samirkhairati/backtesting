@@ -1,6 +1,7 @@
 FROM python:3.11-slim AS base
 WORKDIR /app
 COPY ingestion/requirements.txt .
+ENV PIP_DEFAULT_TIMEOUT=100
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Development stage

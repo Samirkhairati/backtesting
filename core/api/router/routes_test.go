@@ -15,7 +15,7 @@ func TestHealthCheckRoute(t *testing.T) {
 	logger.Init()
 
 	// Setup the router
-	r := SetupRouter(nil, nil) // Pass nil DB pool for healthcheck test
+	r := SetupRouter(nil, nil, nil) // Pass nil DB pool for healthcheck test
 
 	// Create a new HTTP GET request to /health
 	w := httptest.NewRecorder()

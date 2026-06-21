@@ -13,11 +13,12 @@ import (
 	"github.com/samirkhairati/backtesting/core/coordinator"
 	"github.com/samirkhairati/backtesting/core/db"
 	"github.com/samirkhairati/backtesting/core/logger"
+	"strings"
+
+	"github.com/samirkhairati/backtesting/core/kafka"
 	pb "github.com/samirkhairati/backtesting/core/proto/coordinator"
-	ingestionpb "github.com/samirkhairati/backtesting/core/proto/ingestion"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
 )
 
@@ -42,28 +43,24 @@ func main() {
 	}
 
 	grpcServer := grpc.NewServer()
-	
-	ingestionUrl := os.Getenv("INGESTION_SERVICE_URL")
-	if ingestionUrl == "" {
-		ingestionUrl = "ingestion-dev:50052"
-	}
-	
-	conn, err := grpc.NewClient(ingestionUrl, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		logger.Log.Warn("Could not connect to Ingestion service", zap.Error(err))
-	} else {
-		defer conn.Close()
-	}
 
-	var ingestionClient ingestionpb.IngestionServiceClient
-	if conn != nil {
-		ingestionClient = ingestionpb.NewIngestionServiceClient(conn)
+	// Kafka Setup
+	kafkaBrokersStr := os.Getenv("KAFKA_BROKERS")
+	if kafkaBrokersStr == "" {
+		kafkaBrokersStr = "kafka:9092"
 	}
+	kafkaBrokers := strings.Split(kafkaBrokersStr, ",")
+
+	producer, err := kafka.NewProducer(kafkaBrokers)
+	if err != nil {
+		log.Fatalf("failed to create kafka producer: %v", err)
+	}
+	defer producer.Close()
 
 	// Register the coordinator service
 	coordinatorServer := &coordinator.Server{
-		DB: dbPool,
-		IngestionClient: ingestionClient,
+		DB:       dbPool,
+		Producer: producer,
 	}
 	pb.RegisterCoordinatorServiceServer(grpcServer, coordinatorServer)
 	
@@ -73,6 +70,13 @@ func main() {
 	// Graceful shutdown setup
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	ingestionConsumer, err := coordinator.NewIngestionConsumer(kafkaBrokers, dbPool, producer)
+	if err != nil {
+		log.Fatalf("failed to create ingestion consumer: %v", err)
+	}
+	defer ingestionConsumer.Close()
+	go ingestionConsumer.Run(ctx)
 
 	go func() {
 		logger.Log.Info("Coordinator gRPC server listening", zap.String("port", port))

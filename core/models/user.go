@@ -13,7 +13,7 @@ type User struct {
 // RegisterRequest represents the JSON payload for registration
 type RegisterRequest struct {
 	Username string `json:"username" binding:"required,min=3,max=50"`
-	Password string `json:"password" binding:"required,min=6,max=50"`
+	Password string `json:"password" binding:"required,max=50"`
 }
 
 // LoginRequest represents the JSON payload for logging in

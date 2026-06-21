@@ -8,8 +8,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/samirkhairati/backtesting/core/kafka"
+	"github.com/samirkhairati/backtesting/core/models"
 	pb "github.com/samirkhairati/backtesting/core/proto/coordinator"
-	ingestionpb "github.com/samirkhairati/backtesting/core/proto/ingestion"
 	"github.com/samirkhairati/backtesting/core/logger"
 	"go.uber.org/zap"
 )
@@ -22,8 +23,8 @@ type DBQuerier interface {
 
 type Server struct {
 	pb.UnimplementedCoordinatorServiceServer
-	DB              DBQuerier
-	IngestionClient ingestionpb.IngestionServiceClient
+	DB       DBQuerier
+	Producer kafka.Publisher
 }
 
 func (s *Server) CreateExperiment(ctx context.Context, req *pb.CreateExperimentRequest) (*pb.CreateExperimentResponse, error) {
@@ -66,40 +67,51 @@ func (s *Server) CreateExperiment(ctx context.Context, req *pb.CreateExperimentR
 	reqEnd := endDateT.Format("2006-01-02")
 
 	// Check coverage for all symbols
-	missingData := false
+	var missingSymbols []string
 	for _, sym := range config.Symbols {
 		var covStart, covEnd time.Time
 		err := s.DB.QueryRow(ctx, "SELECT start_date, end_date FROM market_data_coverage WHERE symbol = $1", sym).Scan(&covStart, &covEnd)
-		if err != nil {
-			missingData = true
-			break
-		}
-		if startDateT.Before(covStart) || endDateT.After(covEnd) {
-			missingData = true
-			break
+		if err != nil || startDateT.Before(covStart) || endDateT.After(covEnd) {
+			missingSymbols = append(missingSymbols, sym)
 		}
 	}
 
 	var status string
-	if missingData {
-		status = "PENDING_INGESTION"
+	if len(missingSymbols) > 0 {
+		status = string(models.ExperimentStatusPendingIngestion)
 		_, err := s.DB.Exec(ctx, "UPDATE experiments SET status = $1 WHERE id = $2", status, experimentID)
-		if err == nil && s.IngestionClient != nil {
-			// Call ingestion asynchronously
-			go func() {
-				_, iErr := s.IngestionClient.IngestData(context.Background(), &ingestionpb.IngestDataRequest{
-					ExperimentId: experimentID,
-					Symbols:      config.Symbols,
+		if err == nil && s.Producer != nil {
+			for _, sym := range missingSymbols {
+				var jobID string
+				err := s.DB.QueryRow(ctx, "INSERT INTO ingestion_jobs (experiment_id, symbol, start_date, end_date, status) VALUES ($1, $2, $3, $4, 'PENDING') RETURNING id",
+					experimentID, sym, reqStart, reqEnd).Scan(&jobID)
+				if err != nil {
+					logger.Log.Error("Failed to insert ingestion job", zap.Error(err))
+					continue
+				}
+
+				publishErr := s.Producer.Publish(ctx, "ingestion-jobs", experimentID, models.IngestionJobMessage{
+					JobID:        jobID,
+					ExperimentID: experimentID,
+					Symbol:       sym,
 					StartDate:    reqStart,
 					EndDate:      reqEnd,
 				})
-				if iErr != nil {
-					logger.Log.Error("Failed to start ingestion", zap.Error(iErr))
+				if publishErr != nil {
+					logger.Log.Error("Failed to publish ingestion job", zap.Error(publishErr))
 				}
-			}()
+			}
+			publishErr := s.Producer.Publish(ctx, "event-stream", experimentID, models.ExperimentEvent{
+				ExperimentID: experimentID,
+				EventType:    models.EventTypeIngestionStarted,
+				TotalJobs:    len(missingSymbols),
+			})
+			if publishErr != nil {
+				logger.Log.Error("Failed to publish event stream message", zap.Error(publishErr))
+			}
 		}
 	} else {
-		status = "READY"
+		status = string(models.ExperimentStatusReady)
 		s.DB.Exec(ctx, "UPDATE experiments SET status = $1 WHERE id = $2", status, experimentID)
 	}
 

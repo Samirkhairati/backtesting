@@ -41,6 +41,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
 
   api-prod:
     build:
@@ -115,6 +117,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
 
   coordinator-prod:
     build:
@@ -142,6 +146,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
 
   ingestion-prod:
     build:
@@ -196,6 +202,7 @@ services:
     command:
       - redpanda
       - start
+      - --default-log-level=warn
       - --smp 1
       - --memory 1G
       - --reserve-memory 0M

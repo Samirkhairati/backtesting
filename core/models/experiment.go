@@ -28,6 +28,6 @@ type Experiment struct {
 	Name        string                  `json:"name"`
 	Description string                  `json:"description"`
 	Config      CreateExperimentRequest `json:"config"`
-	Status      string                  `json:"status"`
+	Status      ExperimentStatus        `json:"status"`
 	CreatedAt   time.Time               `json:"created_at"`
 }

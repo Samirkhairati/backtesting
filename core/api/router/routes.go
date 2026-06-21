@@ -12,7 +12,7 @@ import (
 )
 
 // SetupRouter initializes and configures the Gin router with all endpoints
-func SetupRouter(db *pgxpool.Pool, coordinatorClient pb.CoordinatorServiceClient) *gin.Engine {
+func SetupRouter(db *pgxpool.Pool, coordinatorClient pb.CoordinatorServiceClient, bus *handlers.EventBus) *gin.Engine {
 	r := gin.New()
 
 	// Apply global middleware
@@ -38,6 +38,7 @@ func SetupRouter(db *pgxpool.Pool, coordinatorClient pb.CoordinatorServiceClient
 		CoordinatorClient: coordinatorClient,
 	}
 	dataHandler := &handlers.DataHandler{DB: db}
+	eventHandler := &handlers.EventHandler{Bus: bus}
 
 	// v1 API Routes
 	v1 := r.Group("/api/v1")
@@ -56,6 +57,7 @@ func SetupRouter(db *pgxpool.Pool, coordinatorClient pb.CoordinatorServiceClient
 			experiments.POST("", experimentHandler.CreateExperiment)
 			experiments.GET("", experimentHandler.GetExperiments)
 			experiments.GET("/:id", experimentHandler.GetExperimentByID)
+			experiments.GET("/:id/events", eventHandler.StreamEvents)
 		}
 
 		data := v1.Group("/data")
