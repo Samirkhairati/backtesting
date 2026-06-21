@@ -159,12 +159,12 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
             </div>
           ) : (
             <div className="rounded-md border border-border/50 overflow-hidden">
-              <Table>
+              <Table className="table-fixed w-full">
                 <TableHeader className="bg-muted/50">
                   <TableRow>
-                    <TableHead className="font-mono uppercase text-xs">Name</TableHead>
-                    <TableHead className="font-mono uppercase text-xs">Status</TableHead>
-                    <TableHead className="font-mono uppercase text-xs">Created At</TableHead>
+                    <TableHead className="font-mono uppercase text-xs w-[25%]">Name</TableHead>
+                    <TableHead className="font-mono uppercase text-xs w-[50%]">Status</TableHead>
+                    <TableHead className="font-mono uppercase text-xs w-[25%] text-right">Created At</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -175,7 +175,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                         <div className="text-xs text-muted-foreground font-mono mt-1">{exp.description}</div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex flex-col gap-2">
+                        <div className="flex items-center gap-4">
                           <span className={`inline-flex w-fit items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
                             exp.status === 'PENDING' ? 'bg-yellow-500/20 text-yellow-500' :
                             exp.status === 'PENDING_INGESTION' ? 'bg-orange-500/20 text-orange-500' :
@@ -188,22 +188,14 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                             {exp.status.replace('_', ' ')}
                           </span>
                           {progressMap[exp.id] && (
-                            <div className="w-full max-w-[200px] text-xs font-mono">
-                              <div className="flex justify-between mb-1 text-muted-foreground">
-                                <span>{progressMap[exp.id].stage}</span>
-                                <span>{Math.round((progressMap[exp.id].completedJobs / Math.max(1, progressMap[exp.id].totalJobs)) * 100)}%</span>
-                              </div>
-                              <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
-                                <div 
-                                  className="h-full bg-primary transition-all duration-300"
-                                  style={{ width: `${(progressMap[exp.id].completedJobs / Math.max(1, progressMap[exp.id].totalJobs)) * 100}%` }}
-                                />
-                              </div>
-                            </div>
+                            <SmoothProgress 
+                              stage={progressMap[exp.id].stage} 
+                              percentage={Math.round((progressMap[exp.id].completedJobs / Math.max(1, progressMap[exp.id].totalJobs)) * 100)} 
+                            />
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="font-mono text-sm text-muted-foreground">
+                      <TableCell className="font-mono text-sm text-muted-foreground text-right">
                         {new Date(exp.created_at).toLocaleString()}
                       </TableCell>
                     </TableRow>
@@ -214,6 +206,45 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
           )}
         </CardContent>
       </Card>
+    </div>
+  )
+}
+
+function SmoothProgress({ stage, percentage }: { stage: string, percentage: number }) {
+  const [displayPercent, setDisplayPercent] = useState(0);
+
+  useEffect(() => {
+    let startTimestamp: number;
+    const startValue = displayPercent;
+    const duration = 1000; // 1 second
+
+    const step = (timestamp: number) => {
+      if (!startTimestamp) startTimestamp = timestamp;
+      const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+      // easeOutQuart
+      const ease = 1 - Math.pow(1 - progress, 4);
+      setDisplayPercent(Math.round(startValue + (percentage - startValue) * ease));
+      
+      if (progress < 1) {
+        requestAnimationFrame(step);
+      }
+    };
+    
+    requestAnimationFrame(step);
+  }, [percentage]);
+
+  return (
+    <div className="w-full min-w-[150px] max-w-[200px] text-xs font-mono">
+      <div className="flex justify-between mb-1 text-muted-foreground">
+        <span>{stage}</span>
+        <span className="tabular-nums">{displayPercent}%</span>
+      </div>
+      <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
+        <div 
+          className="h-full bg-primary transition-all duration-1000 ease-out"
+          style={{ width: `${percentage}%` }}
+        />
+      </div>
     </div>
   )
 }

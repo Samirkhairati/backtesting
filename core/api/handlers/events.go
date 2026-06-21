@@ -127,7 +127,7 @@ func (h *EventHandler) StreamEvents(c *gin.Context) {
 				return false
 			}
 			data, _ := json.Marshal(event)
-			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event.EventType, data)
+			fmt.Fprintf(w, "data: %s\n\n", data)
 			return true
 		}
 	})

@@ -36,6 +36,8 @@ services:
       - "${API_HOST_PORT}:8080"
     volumes:
       - .:/app
+
+      - go_build_cache:/root/.cache/go-build
     env_file: .env
     command: sh -c "go mod tidy && air -c .air/api.toml"
     depends_on:
@@ -67,6 +69,8 @@ services:
     profiles: ["dev"]
     volumes:
       - .:/app
+
+      - go_build_cache:/root/.cache/go-build
     env_file: .env
     command: sh -c "go mod tidy && air -c .air/worker.toml"
     depends_on:
@@ -94,6 +98,8 @@ services:
     profiles: ["test"]
     volumes:
       - .:/app
+
+      - go_build_cache:/root/.cache/go-build
     env_file: .env
     command: sh -c "go mod tidy && go test ./... -v"
     depends_on:
@@ -112,6 +118,8 @@ services:
       - "${COORDINATOR_HOST_PORT}:50051"
     volumes:
       - .:/app
+
+      - go_build_cache:/root/.cache/go-build
     env_file: .env
     command: sh -c "go mod tidy && air -c .air/coordinator.toml"
     depends_on:
@@ -255,3 +263,4 @@ volumes:
   postgres_data:
   redpanda_data:
   redis_data:
+  go_build_cache:
