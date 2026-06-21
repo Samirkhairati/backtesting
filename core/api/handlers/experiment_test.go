@@ -64,7 +64,7 @@ func TestExperimentEndpoints_Mocked(t *testing.T) {
 				},
 			},
 			Timeframes: []models.Timeframe{
-				{Start: "2020-01-01", End: "2020-12-31"},
+				{Start: "2020-01-01T00:00:00Z", End: "2020-12-31T00:00:00Z"},
 			},
 		}
 
@@ -180,7 +180,7 @@ func TestExperimentEndpoints_Integration(t *testing.T) {
 				},
 			},
 			Timeframes: []models.Timeframe{
-				{Start: "2021-01-01", End: "2021-12-31"},
+				{Start: "2021-01-01T00:00:00Z", End: "2021-12-31T00:00:00Z"},
 			},
 		}
 

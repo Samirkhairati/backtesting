@@ -5,15 +5,11 @@ import threading
 import logging
 from concurrent import futures
 
-import grpc
+import yfinance as yf
 import psycopg2
 from psycopg2.extras import execute_values
-import yfinance as yf
 import pandas as pd
 from datetime import datetime
-
-import ingestion_pb2
-import ingestion_pb2_grpc
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -101,27 +97,10 @@ def run_ingestion(experiment_id, symbols, start_date, end_date):
         if 'conn' in locals():
             conn.close()
 
-class IngestionService(ingestion_pb2_grpc.IngestionServiceServicer):
-    def IngestData(self, request, context):
-        logger.info(f"Received IngestData request for {request.experiment_id}")
-        
-        # Run in background to not block coordinator
-        thread = threading.Thread(
-            target=run_ingestion, 
-            args=(request.experiment_id, list(request.symbols), request.start_date, request.end_date)
-        )
-        thread.start()
-        
-        return ingestion_pb2.IngestDataResponse(success=True)
-
-def serve():
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
-    ingestion_pb2_grpc.add_IngestionServiceServicer_to_server(IngestionService(), server)
-    port = "50052"
-    server.add_insecure_port(f'[::]:{port}')
-    server.start()
-    logger.info(f"Ingestion service started on port {port}")
-    server.wait_for_termination()
-
 if __name__ == '__main__':
-    serve()
+    logger.info("Ingestion service started (gRPC removed). Waiting for tasks...")
+    try:
+        while True:
+            time.sleep(3600)
+    except KeyboardInterrupt:
+        logger.info("Shutting down...")
