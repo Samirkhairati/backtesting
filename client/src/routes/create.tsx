@@ -134,7 +134,7 @@ function CreateExperiment() {
           </Button>
         </Link>
         <div>
-          <h1 className="text-3xl font-bold tracking-tight glow-text text-primary flex items-center gap-2">
+          <h1 className="text-3xl font-bold tracking-tight text-primary flex items-center gap-2">
             Create Experiment
           </h1>
           <p className="text-muted-foreground font-mono text-sm">Configure your backtesting parameters.</p>
@@ -315,7 +315,7 @@ function CreateExperiment() {
 
               <Button 
                 type="submit" 
-                variant="glow" 
+                variant="default" 
                 disabled={mutation.isPending} 
                 className="w-full font-mono tracking-widest relative mt-4 h-12"
               >

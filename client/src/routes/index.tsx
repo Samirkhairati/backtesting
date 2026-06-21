@@ -27,7 +27,7 @@ function Index() {
       <div className="flex flex-col items-center justify-center text-center space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-1000">
         <div className="space-y-4">
           <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight">
-            Backtesting <span className="text-primary glow-text">Platform</span>
+            Backtesting <span className="text-primary">Platform</span>
           </h1>
           <p className="text-muted-foreground text-lg md:text-xl max-w-[600px] font-mono">
             Login or register to access the backtesting dashboard.
@@ -36,7 +36,7 @@ function Index() {
 
         <div className="flex items-center gap-4">
           <Link to="/login">
-            <Button variant="glow" size="lg" className="font-mono text-base px-8 h-12">
+            <Button variant="default" size="lg" className="font-mono text-base px-8 h-12">
               Login
             </Button>
           </Link>
@@ -114,7 +114,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
     <div className="w-full max-w-5xl space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight glow-text text-primary flex items-center gap-2">
+          <h1 className="text-3xl font-bold tracking-tight text-primary flex items-center gap-2">
             <Activity className="h-8 w-8" />
             Dashboard
           </h1>
@@ -122,7 +122,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         </div>
         <div className="flex items-center gap-4">
           <Link to="/create">
-            <Button variant="glow" className="font-mono flex items-center gap-2">
+            <Button variant="default" className="font-mono flex items-center gap-2">
               <Plus className="h-4 w-4" />
               New Experiment
             </Button>

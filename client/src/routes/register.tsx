@@ -78,7 +78,7 @@ function Register() {
       <Card className="border-primary/20">
         <CardHeader className="space-y-1">
           <div className="flex items-center gap-2 mb-2">
-            <Database className="h-6 w-6 text-primary glow-text" />
+            <Database className="h-6 w-6 text-primary" />
             <CardTitle className="text-2xl font-bold tracking-tight">Register</CardTitle>
           </div>
           <CardDescription className="font-mono text-xs">
@@ -128,7 +128,7 @@ function Register() {
                 )}
               />
               <div className="pt-2">
-                <Button type="submit" variant="glow" disabled={isLoading} className="w-full font-mono uppercase tracking-widest relative">
+                <Button type="submit" variant="default" disabled={isLoading} className="w-full font-mono uppercase tracking-widest relative">
                   {isLoading ? (
                     <div className="flex items-center gap-2">
                       <div className="h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent" />
