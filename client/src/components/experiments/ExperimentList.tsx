@@ -75,7 +75,7 @@ export function ExperimentList({
                       <div className="text-xs text-muted-foreground font-mono mt-1 truncate">{exp.description}</div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex flex-wrap items-center gap-3">
+                      <div className="flex flex-col items-start gap-2">
                         <span className={`inline-flex w-fit items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
                           exp.status === 'PENDING' ? 'bg-yellow-500/20 text-yellow-500' :
                           exp.status === 'PENDING_INGESTION' ? 'bg-orange-500/20 text-orange-500' :
@@ -88,7 +88,7 @@ export function ExperimentList({
                           {exp.status.replace('_', ' ')}
                         </span>
                         {progressMap[exp.id] && (
-                          <div className="flex-1 min-w-[120px] max-w-[200px]">
+                          <div className="w-full mt-1">
                             <SmoothProgress 
                               stage={progressMap[exp.id].stage} 
                               percentage={Math.round((progressMap[exp.id].completedJobs / Math.max(1, progressMap[exp.id].totalJobs)) * 100)} 
@@ -97,8 +97,9 @@ export function ExperimentList({
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="font-mono text-sm text-muted-foreground text-right">
-                      {new Date(exp.created_at).toLocaleString()}
+                    <TableCell className="font-mono text-xs text-muted-foreground text-right leading-tight">
+                      {new Date(exp.created_at).toLocaleDateString()}<br/>
+                      {new Date(exp.created_at).toLocaleTimeString()}
                     </TableCell>
                   </TableRow>
                 ))}

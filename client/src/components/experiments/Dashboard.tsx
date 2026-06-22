@@ -33,11 +33,12 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     const abortControllers: Record<string, AbortController> = {};
 
     data.experiments.forEach((exp: { id: string; status: string }) => {
-      if (exp.status === 'PENDING_INGESTION') {
+      if (exp.status === 'PENDING_INGESTION' || exp.status === 'INGESTED' || exp.status === 'RUNNING') {
         const controller = new AbortController();
         abortControllers[exp.id] = controller;
         
         subscribeToExperimentEvents(exp.id, (eventType, eventData) => {
+          console.log(`[SSE Event] ${exp.id} | ${eventType}`, eventData);
           if (eventType === 'INGESTION_STARTED' || eventType === 'INGESTION_JOB_COMPLETED') {
             setProgressMap(prev => ({
               ...prev,
@@ -48,6 +49,20 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
               }
             }));
           } else if (eventType === 'INGESTION_COMPLETED') {
+            queryClient.invalidateQueries({ queryKey: ['experiments'] });
+            if (exp.id === selectedExperimentId) {
+              queryClient.invalidateQueries({ queryKey: ['experiment', exp.id] });
+            }
+          } else if (eventType === 'BACKTESTING_STARTED' || eventType === 'BACKTESTING_JOB_COMPLETED') {
+            setProgressMap(prev => ({
+              ...prev,
+              [exp.id]: {
+                totalJobs: eventData.total_jobs || 0,
+                completedJobs: eventData.completed_jobs || 0,
+                stage: 'Backtesting'
+              }
+            }));
+          } else if (eventType === 'BACKTESTING_COMPLETED') {
             queryClient.invalidateQueries({ queryKey: ['experiments'] });
             if (exp.id === selectedExperimentId) {
               queryClient.invalidateQueries({ queryKey: ['experiment', exp.id] });
@@ -68,7 +83,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
   }, [data?.experiments, queryClient, selectedExperimentId]);
 
   return (
-    <div className="w-full max-w-5xl space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <div className="w-full max-w-7xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-primary flex items-center gap-2">

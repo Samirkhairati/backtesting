@@ -106,6 +106,7 @@ export function subscribeToExperimentEvents(
   eventSource.onmessage = (event) => {
     try {
       const parsed = JSON.parse(event.data);
+      console.log("ALL EVENTS:", parsed);
       onEvent(parsed.event_type, parsed);
     } catch (err) {
       console.error("Failed to parse SSE message", err);

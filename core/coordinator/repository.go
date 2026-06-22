@@ -69,3 +69,34 @@ func (r *ExperimentRepository) GetIngestionJobCounts(ctx context.Context, experi
 	err = r.DB.QueryRow(ctx, "SELECT COUNT(*) FILTER (WHERE status='PENDING'), COUNT(*) FROM ingestion_jobs WHERE experiment_id=$1", experimentID).Scan(&pending, &total)
 	return pending, total, err
 }
+
+func (r *ExperimentRepository) GetExperimentConfig(ctx context.Context, experimentID string) (string, error) {
+	var config string
+	err := r.DB.QueryRow(ctx, "SELECT config FROM experiments WHERE id=$1", experimentID).Scan(&config)
+	return config, err
+}
+
+func (r *ExperimentRepository) InsertBacktestJob(ctx context.Context, experimentID, symbol, strategyName string, parameters []byte, startDate, endDate string) (string, error) {
+	var jobID string
+	err := r.DB.QueryRow(
+		ctx,
+		"INSERT INTO backtest_jobs (experiment_id, symbol, strategy_name, parameters, start_date, end_date, status) VALUES ($1, $2, $3, $4, $5, $6, 'PENDING') RETURNING id",
+		experimentID,
+		symbol,
+		strategyName,
+		parameters,
+		startDate,
+		endDate,
+	).Scan(&jobID)
+	return jobID, err
+}
+
+func (r *ExperimentRepository) UpdateBacktestJobStatus(ctx context.Context, jobID, status string, resultMetrics []byte) error {
+	_, err := r.DB.Exec(ctx, "UPDATE backtest_jobs SET status=$1, completed_at=CURRENT_TIMESTAMP, result_metrics=$2 WHERE id=$3", status, resultMetrics, jobID)
+	return err
+}
+
+func (r *ExperimentRepository) GetBacktestJobCounts(ctx context.Context, experimentID string) (pending int, total int, err error) {
+	err = r.DB.QueryRow(ctx, "SELECT COUNT(*) FILTER (WHERE status='PENDING'), COUNT(*) FROM backtest_jobs WHERE experiment_id=$1", experimentID).Scan(&pending, &total)
+	return pending, total, err
+}

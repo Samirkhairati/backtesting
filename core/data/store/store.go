@@ -9,4 +9,5 @@ import (
 type Store interface {
 	GetBars(ctx context.Context, symbol string) (data.BarIterator, error)
 	GetMultiBars(ctx context.Context, symbols []string) (data.MultiBarIterator, error)
+	GetMultiBarsWithTimeframe(ctx context.Context, symbols []string, start, end string) (data.MultiBarIterator, error)
 }

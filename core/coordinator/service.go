@@ -98,3 +98,97 @@ func (s *ExperimentService) CreateExperiment(ctx context.Context, userID, name, 
 	logger.Log.Info("Experiment created", zap.String("id", experimentID), zap.String("status", string(status)))
 	return experimentID, string(status), nil
 }
+
+func (s *ExperimentService) GenerateBacktestJobs(ctx context.Context, experimentID string) error {
+	configJSON, err := s.Repo.GetExperimentConfig(ctx, experimentID)
+	if err != nil {
+		return err
+	}
+
+	var config models.CreateExperimentRequest
+	if err := json.Unmarshal([]byte(configJSON), &config); err != nil {
+		return err
+	}
+
+	totalJobs := 0
+
+	for _, sym := range config.Symbols {
+		for _, tf := range config.Timeframes {
+			for _, strat := range config.Strategies {
+				combinations := generateCombinations(strat.Parameters)
+				if len(combinations) == 0 {
+					combinations = append(combinations, make(map[string]interface{}))
+				}
+
+				for _, params := range combinations {
+					paramsJSON, _ := json.Marshal(params)
+					jobID, err := s.Repo.InsertBacktestJob(ctx, experimentID, sym, strat.Name, paramsJSON, tf.Start, tf.End)
+					if err != nil {
+						logger.Log.Error("Failed to insert backtest job", zap.Error(err))
+						continue
+					}
+					totalJobs++
+
+					publishErr := s.Producer.Publish(ctx, "backtesting-jobs", experimentID, models.BacktestJobMessage{
+						JobID:        jobID,
+						ExperimentID: experimentID,
+						Symbol:       sym,
+						StrategyName: strat.Name,
+						Parameters:   params,
+						StartDate:    tf.Start,
+						EndDate:      tf.End,
+					})
+					if publishErr != nil {
+						logger.Log.Error("Failed to publish backtesting job", zap.Error(publishErr))
+					}
+				}
+			}
+		}
+	}
+
+	if totalJobs > 0 {
+		s.Repo.UpdateExperimentStatus(ctx, experimentID, models.ExperimentStatusRunning)
+		s.Producer.Publish(ctx, "event-stream", experimentID, models.ExperimentEvent{
+			ExperimentID: experimentID,
+			EventType:    models.EventTypeBacktestingStarted,
+			TotalJobs:    totalJobs,
+		})
+	} else {
+		s.Repo.UpdateExperimentStatus(ctx, experimentID, models.ExperimentStatusCompleted)
+	}
+
+	return nil
+}
+
+func generateCombinations(params map[string][]interface{}) []map[string]interface{} {
+	var keys []string
+	var values [][]interface{}
+	for k, v := range params {
+		keys = append(keys, k)
+		values = append(values, v)
+	}
+
+	var results []map[string]interface{}
+	var helper func(int, map[string]interface{})
+	helper = func(depth int, current map[string]interface{}) {
+		if depth == len(keys) {
+			clone := make(map[string]interface{})
+			for k, v := range current {
+				clone[k] = v
+			}
+			results = append(results, clone)
+			return
+		}
+		
+		for _, v := range values[depth] {
+			current[keys[depth]] = v
+			helper(depth+1, current)
+		}
+	}
+	
+	if len(keys) > 0 {
+		helper(0, make(map[string]interface{}))
+	}
+	return results
+}
+

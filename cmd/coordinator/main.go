@@ -75,6 +75,13 @@ func main() {
 	defer ingestionConsumer.Close()
 	go ingestionConsumer.Run(ctx)
 
+	backtestingConsumer, err := coordinator.NewBacktestingConsumer(kafkaBrokers, dbPool, producer)
+	if err != nil {
+		log.Fatalf("failed to create backtesting consumer: %v", err)
+	}
+	defer backtestingConsumer.Close()
+	go backtestingConsumer.Run(ctx)
+
 	go func() {
 		logger.Log.Info("Coordinator gRPC server listening", zap.String("port", port))
 		if err := grpcServer.Serve(lis); err != nil {

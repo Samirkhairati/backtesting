@@ -73,6 +73,11 @@ func (ic *IngestionConsumer) handle(ctx context.Context, record *kgo.Record) err
 			TotalJobs:     total,
 			CompletedJobs: completed,
 		})
+
+		service := NewExperimentService(ic.Repo, ic.Producer)
+		if err := service.GenerateBacktestJobs(ctx, msg.ExperimentID); err != nil {
+			logger.Log.Error("Failed to generate backtest jobs", zap.Error(err))
+		}
 	}
 
 	return nil

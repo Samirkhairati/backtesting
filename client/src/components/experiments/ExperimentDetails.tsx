@@ -87,7 +87,10 @@ export function ExperimentDetails({ experimentId }: { experimentId: string }) {
                         </span>
                       </TableCell>
                       <TableCell className="font-mono text-xs text-muted-foreground">
-                        {new Date(log.created_at).toLocaleTimeString()}
+                        {(() => {
+                          const d = new Date(log.created_at);
+                          return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}:${d.getMilliseconds().toString().padStart(3, '0')}`;
+                        })()}
                       </TableCell>
                       <TableCell className="font-mono text-xs text-muted-foreground text-right tabular-nums">
                         {durationDisplay}

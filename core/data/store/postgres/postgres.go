@@ -118,6 +118,46 @@ func (p *postgresStore) GetMultiBars(ctx context.Context, symbols []string) (dat
 	return iter, nil
 }
 
+func (p *postgresStore) GetMultiBarsWithTimeframe(ctx context.Context, symbols []string, start, end string) (data.MultiBarIterator, error) {
+	query := `
+		SELECT symbol, timestamp, open, high, low, close, volume 
+		FROM daily_bars 
+		WHERE symbol = ANY($1) AND timestamp >= $2 AND timestamp <= $3
+		ORDER BY timestamp ASC
+	`
+	rows, err := p.db.Query(ctx, query, symbols, start, end)
+	if err != nil {
+		return nil, err
+	}
+
+	iter := &postgresMultiIterator{
+		rows: rows,
+		bars: make(map[string]data.Bar),
+	}
+
+	// Read the very first row to initialize state
+	if iter.rows.Next() {
+		err := iter.rows.Scan(
+			&iter.nextBar.Symbol,
+			&iter.nextBar.Timestamp,
+			&iter.nextBar.Open,
+			&iter.nextBar.High,
+			&iter.nextBar.Low,
+			&iter.nextBar.Close,
+			&iter.nextBar.Volume,
+		)
+		if err != nil {
+			iter.err = err
+		} else {
+			iter.hasData = true
+		}
+	} else if err := iter.rows.Err(); err != nil {
+		iter.err = err
+	}
+
+	return iter, nil
+}
+
 type postgresMultiIterator struct {
 	rows      pgx.Rows
 	err       error

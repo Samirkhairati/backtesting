@@ -29,4 +29,7 @@ const (
 	EventTypeIngestionStarted      EventType = "INGESTION_STARTED"
 	EventTypeIngestionJobCompleted EventType = "INGESTION_JOB_COMPLETED"
 	EventTypeIngestionCompleted    EventType = "INGESTION_COMPLETED"
+	EventTypeBacktestingStarted      EventType = "BACKTESTING_STARTED"
+	EventTypeBacktestingJobCompleted EventType = "BACKTESTING_JOB_COMPLETED"
+	EventTypeBacktestingCompleted    EventType = "BACKTESTING_COMPLETED"
 )

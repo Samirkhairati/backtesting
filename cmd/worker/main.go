@@ -3,56 +3,59 @@ package main
 import (
 	"context"
 	"log"
+	"os"
+	"os/signal"
+	"strings"
+	"syscall"
 
+	"github.com/joho/godotenv"
 	"github.com/samirkhairati/backtesting/core/data/store/postgres"
 	"github.com/samirkhairati/backtesting/core/db"
-	"github.com/samirkhairati/backtesting/core/metrics"
-	"github.com/samirkhairati/backtesting/core/simulator"
-	"github.com/samirkhairati/backtesting/core/strategy"
+	"github.com/samirkhairati/backtesting/core/kafka"
+	"github.com/samirkhairati/backtesting/core/logger"
+	"github.com/samirkhairati/backtesting/core/worker"
+	"go.uber.org/zap"
 )
 
 func main() {
-	log.Println("Starting Backtesting Engine...")
-	ctx := context.Background()
+	logger.Init()
+
+	if os.Getenv("ENV") != "production" {
+		if err := godotenv.Load(".env"); err != nil {
+			logger.Log.Warn("No .env file found")
+		}
+	}
+
+	log.Println("Starting Backtesting Engine Worker...")
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	pool := db.Setup(ctx)
 	defer pool.Close()
 
 	store := postgres.NewStore(pool)
-	symbols := []string{"AAPL", "MSFT", "TSLA", "AMZN", "GOOGL"}
-	log.Printf("Fetching historical data for %v...", symbols)
 
-	strategies := map[string]strategy.Strategy{
-		"Buy and Hold":        strategy.NewBuyAndHoldStrategy(),
-		"SMA Cross (50, 200)": strategy.NewSMACrossStrategy(50, 200),
-		"MACD (12, 26, 9)":    strategy.NewMACDStrategy(),
-		"RSI Mean Reversion":  strategy.NewMeanReversionStrategy(),
-		"Bollinger Bands":     strategy.NewBollingerBandsStrategy(),
+	kafkaBrokersStr := os.Getenv("KAFKA_BROKERS")
+	if kafkaBrokersStr == "" {
+		kafkaBrokersStr = "kafka:9092"
 	}
+	kafkaBrokers := strings.Split(kafkaBrokersStr, ",")
 
-	results := make(map[string]*metrics.PerformanceReport)
-
-	for name, strat := range strategies {
-		log.Printf("\n--- Running Strategy: %s ---", name)
-
-		iter, err := store.GetMultiBars(ctx, symbols)
-		if err != nil {
-			log.Fatalf("Failed to get bars for %v: %v", symbols, err)
-		}
-
-		simEngine := simulator.NewEngine(iter, strat)
-
-		if err := simEngine.Run(); err != nil {
-			log.Fatalf("Simulation encountered an error on %s: %v", name, err)
-		}
-
-		results[name] = metrics.GenerateReport(simEngine.Portfolio)
+	producer, err := kafka.NewProducer(kafkaBrokers)
+	if err != nil {
+		log.Fatalf("failed to create kafka producer: %v", err)
 	}
+	defer producer.Close()
 
-	log.Println("\n\n======================================")
-	log.Println("       FINAL SIMULATION RESULTS       ")
-	log.Println("======================================")
-	for name, report := range results {
-		log.Printf("\n>>> STRATEGY: %s <<<\n%s", name, report.String())
+	w, err := worker.NewWorker(kafkaBrokers, store, producer)
+	if err != nil {
+		log.Fatalf("failed to create worker: %v", err)
 	}
+	defer w.Close()
+
+	logger.Log.Info("Worker is running and waiting for jobs", zap.Strings("brokers", kafkaBrokers))
+	w.Run(ctx)
+	
+	<-ctx.Done()
+	logger.Log.Info("Worker exiting gracefully")
 }
