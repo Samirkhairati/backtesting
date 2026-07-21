@@ -67,25 +67,50 @@ func (bc *BacktestingConsumer) handle(ctx context.Context, record *kgo.Record) e
 	})
 
 	if pending == 0 {
-		jobs, err := bc.Repo.GetBacktestJobMetrics(ctx, msg.ExperimentID)
-		if err != nil {
-			logger.Log.Error("Failed to get backtest job metrics", zap.Error(err))
-		} else if len(jobs) > 0 {
-			resultSummary, equityCurves := AggregateJobMetrics(jobs)
-			if err := bc.Repo.UpdateExperimentResults(ctx, msg.ExperimentID, resultSummary, equityCurves); err != nil {
-				logger.Log.Error("Failed to update experiment results", zap.Error(err))
-			}
-		}
-
-		if err := bc.Repo.UpdateExperimentStatus(ctx, msg.ExperimentID, models.ExperimentStatusCompleted); err != nil {
+		if err := bc.Repo.UpdateExperimentStatus(ctx, msg.ExperimentID, models.ExperimentStatusAggregating); err != nil {
 			return err
 		}
 		bc.Producer.Publish(ctx, "event-stream", msg.ExperimentID, models.ExperimentEvent{
 			ExperimentID:  msg.ExperimentID,
-			EventType:     models.EventTypeBacktestingCompleted,
+			EventType:     models.EventTypeAggregationStarted,
 			TotalJobs:     total,
 			CompletedJobs: completed,
 		})
+
+		jobs, err := bc.Repo.GetBacktestJobMetrics(ctx, msg.ExperimentID)
+		if err != nil {
+			logger.Log.Error("Failed to get backtest job metrics", zap.Error(err))
+		} else {
+			// Run aggregation asynchronously
+			go func(expID string, jobs []models.BacktestJob, tot, comp int) {
+				bgCtx := context.Background()
+				if len(jobs) > 0 {
+					resultSummary, equityCurves := AggregateJobMetrics(jobs)
+					if err := bc.Repo.UpdateExperimentResults(bgCtx, expID, resultSummary, equityCurves); err != nil {
+						logger.Log.Error("Failed to update experiment results", zap.Error(err))
+					}
+				}
+
+				if err := bc.Repo.UpdateExperimentStatus(bgCtx, expID, models.ExperimentStatusCompleted); err != nil {
+					logger.Log.Error("Failed to update experiment status to completed", zap.Error(err))
+					return
+				}
+				
+				bc.Producer.Publish(bgCtx, "event-stream", expID, models.ExperimentEvent{
+					ExperimentID:  expID,
+					EventType:     models.EventTypeAggregationCompleted,
+					TotalJobs:     tot,
+					CompletedJobs: comp,
+				})
+
+				bc.Producer.Publish(bgCtx, "event-stream", expID, models.ExperimentEvent{
+					ExperimentID:  expID,
+					EventType:     models.EventTypeBacktestingCompleted,
+					TotalJobs:     tot,
+					CompletedJobs: comp,
+				})
+			}(msg.ExperimentID, jobs, total, completed)
+		}
 	}
 
 	return nil

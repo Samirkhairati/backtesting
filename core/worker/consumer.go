@@ -8,6 +8,7 @@ import (
 	"github.com/samirkhairati/backtesting/core/logger"
 	"github.com/samirkhairati/backtesting/core/metrics"
 	"github.com/samirkhairati/backtesting/core/models"
+	"github.com/samirkhairati/backtesting/core/portfolio"
 	"github.com/samirkhairati/backtesting/core/simulator"
 	"github.com/samirkhairati/backtesting/core/strategy"
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -83,7 +84,7 @@ func (w *Worker) handle(ctx context.Context, record *kgo.Record) error {
 		"SharpeRatio":      report.SharpeRatio,
 		"WinRate":          report.TradeAnalytics.WinRatePct,
 		"TotalTrades":      report.TradeAnalytics.TotalTrades,
-		"EquityCurve":      engine.Portfolio.EquityCurve,
+		"EquityCurve":      downsampleEquityCurve(engine.Portfolio.EquityCurve, 100),
 	}
 
 	w.publishCompleted(ctx, msg, "COMPLETED", resultMap)
@@ -103,4 +104,21 @@ func (w *Worker) publishCompleted(ctx context.Context, msg models.BacktestJobMes
 	if err := w.Producer.Publish(ctx, "backtesting-completed-jobs", msg.ExperimentID, completedMsg); err != nil {
 		logger.Log.Error("Failed to publish backtesting completed job", zap.Error(err))
 	}
+}
+
+func downsampleEquityCurve(curve []portfolio.EquityPoint, maxPoints int) []portfolio.EquityPoint {
+	if len(curve) <= maxPoints {
+		return curve
+	}
+	
+	result := make([]portfolio.EquityPoint, 0, maxPoints)
+	step := float64(len(curve)-1) / float64(maxPoints-1)
+	
+	for i := 0; i < maxPoints-1; i++ {
+		idx := int(float64(i) * step)
+		result = append(result, curve[idx])
+	}
+	result = append(result, curve[len(curve)-1])
+	
+	return result
 }

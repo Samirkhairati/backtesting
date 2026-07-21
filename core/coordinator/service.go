@@ -70,7 +70,7 @@ func (s *ExperimentService) CreateExperiment(ctx context.Context, userID, name, 
 					continue
 				}
 
-				publishErr := s.Producer.Publish(ctx, "ingestion-jobs", experimentID, models.IngestionJobMessage{
+				publishErr := s.Producer.Publish(ctx, "ingestion-jobs", jobID, models.IngestionJobMessage{
 					JobID:        jobID,
 					ExperimentID: experimentID,
 					Symbol:       sym,
@@ -93,6 +93,13 @@ func (s *ExperimentService) CreateExperiment(ctx context.Context, userID, name, 
 	} else {
 		status = models.ExperimentStatusReady
 		s.Repo.UpdateExperimentStatus(ctx, experimentID, status)
+		
+		err := s.GenerateBacktestJobs(ctx, experimentID)
+		if err != nil {
+			logger.Log.Error("Failed to generate backtest jobs", zap.Error(err))
+		} else {
+			status = models.ExperimentStatusRunning
+		}
 	}
 
 	logger.Log.Info("Experiment created", zap.String("id", experimentID), zap.String("status", string(status)))
@@ -129,7 +136,7 @@ func (s *ExperimentService) GenerateBacktestJobs(ctx context.Context, experiment
 					}
 					totalJobs++
 
-					publishErr := s.Producer.Publish(ctx, "backtesting-jobs", experimentID, models.BacktestJobMessage{
+					publishErr := s.Producer.Publish(ctx, "backtesting-jobs", jobID, models.BacktestJobMessage{
 						JobID:        jobID,
 						ExperimentID: experimentID,
 						Symbol:       sym,

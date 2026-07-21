@@ -82,6 +82,7 @@ export function ExperimentList({
                           exp.status === 'INGESTED' ? 'bg-purple-500/20 text-purple-500' :
                           exp.status === 'READY' ? 'bg-indigo-500/20 text-indigo-500' :
                           exp.status === 'RUNNING' ? 'bg-blue-500/20 text-blue-500' :
+                          exp.status === 'AGGREGATING' ? 'bg-cyan-500/20 text-cyan-500' :
                           exp.status === 'COMPLETED' ? 'bg-green-500/20 text-green-500' :
                           'bg-red-500/20 text-red-500'
                         }`}>

@@ -20,7 +20,9 @@ type PerformanceReport struct {
 
 func GenerateReport(pf *portfolio.Portfolio) *PerformanceReport {
 	if len(pf.EquityCurve) == 0 {
-		return &PerformanceReport{}
+		return &PerformanceReport{
+			TradeAnalytics: &TradeAnalytics{},
+		}
 	}
 
 	initialValue := pf.EquityCurve[0].Value

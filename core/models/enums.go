@@ -9,6 +9,7 @@ const (
 	ExperimentStatusReady            ExperimentStatus = "READY"
 	ExperimentStatusIngested         ExperimentStatus = "INGESTED"
 	ExperimentStatusRunning          ExperimentStatus = "RUNNING"
+	ExperimentStatusAggregating      ExperimentStatus = "AGGREGATING"
 	ExperimentStatusCompleted        ExperimentStatus = "COMPLETED"
 	ExperimentStatusFailed           ExperimentStatus = "FAILED"
 )
@@ -32,4 +33,6 @@ const (
 	EventTypeBacktestingStarted      EventType = "BACKTESTING_STARTED"
 	EventTypeBacktestingJobCompleted EventType = "BACKTESTING_JOB_COMPLETED"
 	EventTypeBacktestingCompleted    EventType = "BACKTESTING_COMPLETED"
+	EventTypeAggregationStarted      EventType = "AGGREGATION_STARTED"
+	EventTypeAggregationCompleted    EventType = "AGGREGATION_COMPLETED"
 )

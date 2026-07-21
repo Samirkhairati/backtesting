@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { MultiSelect } from "@/components/ui/multi-select"
 import { fetchExperimentById } from '@/lib/api'
 import { formatDuration } from '@/lib/formatters'
+import { Button } from '@/components/ui/button'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 
 interface EquityPoint {
@@ -14,6 +15,8 @@ interface EquityPoint {
 
 export function ExperimentDetails({ experimentId }: { experimentId: string }) {
   const [selectedCurves, setSelectedCurves] = useState<string[]>(['Average'])
+  const [page, setPage] = useState(0)
+  const pageSize = 10
 
   const { data: exp, isLoading } = useQuery({
     queryKey: ['experiment', experimentId],
@@ -183,7 +186,30 @@ export function ExperimentDetails({ experimentId }: { experimentId: string }) {
 
         {exp.status === 'COMPLETED' && resultSummary?.JobMetrics && (
           <div className="space-y-2">
-            <h3 className="font-mono uppercase tracking-widest text-xs text-muted-foreground">Results By Symbol</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="font-mono uppercase tracking-widest text-xs text-muted-foreground">Results By Symbol</h3>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setPage(p => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  className="font-mono text-xs h-7"
+                >
+                  Prev
+                </Button>
+                <span className="font-mono text-xs flex items-center text-muted-foreground">Page {page + 1}</span>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setPage(p => p + 1)}
+                  disabled={(page + 1) * pageSize >= resultSummary.JobMetrics.length}
+                  className="font-mono text-xs h-7"
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
             <div className="rounded-md border border-border/50 overflow-hidden">
               <Table className="table-fixed w-full">
                 <TableHeader className="bg-muted/50">
@@ -198,6 +224,7 @@ export function ExperimentDetails({ experimentId }: { experimentId: string }) {
                 <TableBody>
                   {([...resultSummary.JobMetrics] as { Symbol: string, Strategy: string, TotalReturn?: number, MaxDrawdown?: number, WinRate?: number }[])
                     .sort((a, b) => a.Symbol.localeCompare(b.Symbol))
+                    .slice(page * pageSize, (page + 1) * pageSize)
                     .map((job, idx) => (
                     <TableRow key={idx} className="hover:bg-primary/5 transition-colors">
                       <TableCell className="font-medium">{job.Symbol}</TableCell>
@@ -251,6 +278,7 @@ export function ExperimentDetails({ experimentId }: { experimentId: string }) {
                           log.status === 'INGESTED' ? 'bg-purple-500/20 text-purple-500' :
                           log.status === 'READY' ? 'bg-indigo-500/20 text-indigo-500' :
                           log.status === 'RUNNING' ? 'bg-blue-500/20 text-blue-500' :
+                          log.status === 'AGGREGATING' ? 'bg-cyan-500/20 text-cyan-500' :
                           log.status === 'COMPLETED' ? 'bg-green-500/20 text-green-500' :
                           'bg-red-500/20 text-red-500'
                         }`}>

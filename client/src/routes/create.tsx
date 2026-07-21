@@ -25,7 +25,10 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Label } from '@/components/ui/label'
 import { createExperiment, searchSymbols } from '@/lib/api'
+import { NASDAQ100_TICKERS, SP500_TICKERS } from '@/lib/stockLists'
 import React from 'react'
 
 export const Route = createFileRoute('/create')({
@@ -35,7 +38,7 @@ export const Route = createFileRoute('/create')({
 const formSchema = z.object({
   name: z.string().min(3, 'Name must be at least 3 characters.'),
   description: z.string().optional(),
-  symbols: z.array(z.string()).min(1, 'Please select at least one symbol.'),
+  symbols: z.array(z.string()).optional().default([]),
   strategies: z.array(z.string()).min(1, 'Please select at least one strategy.'),
   startDate: z.string().min(1, 'Start date is required.'),
   endDate: z.string().min(1, 'End date is required.'),
@@ -72,6 +75,7 @@ function CreateExperiment() {
 
   const [searchTerm, setSearchTerm] = React.useState('')
   const [debouncedSearch, setDebouncedSearch] = React.useState('')
+  const [stockSelectionMode, setStockSelectionMode] = React.useState<'custom' | 'nasdaq100' | 'sp500'>('custom')
 
   React.useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchTerm), 300)
@@ -82,7 +86,7 @@ function CreateExperiment() {
   const { data: searchResults, isLoading: isLoadingSymbols } = useQuery({
     queryKey: ['symbols', debouncedSearch],
     queryFn: () => searchSymbols(debouncedSearch),
-    enabled: debouncedSearch.length > 0,
+    enabled: debouncedSearch.length > 0 && stockSelectionMode === 'custom',
   })
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -106,11 +110,23 @@ function CreateExperiment() {
   })
 
   const onSubmit = (values: z.infer<typeof formSchema>) => {
+    let finalSymbols = values.symbols || [];
+    if (stockSelectionMode === 'nasdaq100') {
+      finalSymbols = NASDAQ100_TICKERS;
+    } else if (stockSelectionMode === 'sp500') {
+      finalSymbols = SP500_TICKERS;
+    }
+
+    if (finalSymbols.length === 0) {
+      form.setError('symbols', { type: 'manual', message: 'Please select at least one symbol.' });
+      return;
+    }
+    
     // Transform form values into the CreateExperimentRequest JSON structure expected by backend
     const payload = {
       name: values.name,
       description: values.description || '',
-      symbols: values.symbols, // Backend expects an array
+      symbols: finalSymbols, // Backend expects an array
       strategies: values.strategies.map((strat) => ({
         name: strat,
         parameters: {}, // Sending empty parameters for MVP as discussed
@@ -183,17 +199,38 @@ function CreateExperiment() {
                   control={form.control}
                   name="symbols"
                   render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="font-mono uppercase text-xs text-muted-foreground">Asset Symbols</FormLabel>
-                      <FormControl>
-                        <MultiSelect
-                          options={searchResults?.map((sym: { symbol: string, name: string }) => ({ label: `${sym.symbol} - ${sym.name}`, value: sym.symbol })) || []}
-                          selected={field.value}
-                          onChange={field.onChange}
-                          onSearch={setSearchTerm}
-                          placeholder={isLoadingSymbols ? "Searching..." : "Type to search stocks"}
-                        />
-                      </FormControl>
+                    <FormItem className="md:col-span-2">
+                      <FormLabel className="font-mono uppercase text-xs text-muted-foreground">Asset Selection</FormLabel>
+                      <RadioGroup 
+                        value={stockSelectionMode} 
+                        onValueChange={(val) => setStockSelectionMode(val as 'custom' | 'nasdaq100' | 'sp500')}
+                        className="flex flex-col space-y-2 mb-4"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="custom" id="custom" />
+                          <Label htmlFor="custom" className="font-mono text-sm">Choose Stocks manually</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="nasdaq100" id="nasdaq100" />
+                          <Label htmlFor="nasdaq100" className="font-mono text-sm">Choose all NASDAQ 100 stocks</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="sp500" id="sp500" />
+                          <Label htmlFor="sp500" className="font-mono text-sm">Choose all S&P 500 stocks</Label>
+                        </div>
+                      </RadioGroup>
+
+                      {stockSelectionMode === 'custom' && (
+                        <FormControl>
+                          <MultiSelect
+                            options={searchResults?.map((sym: { symbol: string, name: string }) => ({ label: `${sym.symbol} - ${sym.name}`, value: sym.symbol })) || []}
+                            selected={field.value}
+                            onChange={field.onChange}
+                            onSearch={setSearchTerm}
+                            placeholder={isLoadingSymbols ? "Searching..." : "Type to search stocks"}
+                          />
+                        </FormControl>
+                      )}
                       <FormMessage className="font-mono text-xs" />
                     </FormItem>
                   )}
