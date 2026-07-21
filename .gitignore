@@ -28,3 +28,4 @@ ingestion/__pycache__/server.cpython-311.pyc
 ingestion/__pycache__/test_server.cpython-311-pytest-9.1.0.pyc
 ingestion/__pycache__/ingestion_pb2_grpc.cpython-311.pyc
 ingestion/__pycache__/ingestion_pb2.cpython-311.pyc
+.agents/AGENTS.md

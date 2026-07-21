@@ -129,7 +129,7 @@ func (h *ExperimentHandler) GetExperimentByID(c *gin.Context) {
 	var exp models.Experiment
 	err := h.DB.QueryRow(
 		context.Background(),
-		"SELECT id, user_id, name, description, config, status, created_at FROM experiments WHERE id = $1 AND user_id = $2",
+		"SELECT id, user_id, name, description, config, status, created_at, result_summary, equity_curves FROM experiments WHERE id = $1 AND user_id = $2",
 		expID,
 		userID,
 	).Scan(
@@ -140,6 +140,8 @@ func (h *ExperimentHandler) GetExperimentByID(c *gin.Context) {
 		&exp.Config,
 		&exp.Status,
 		&exp.CreatedAt,
+		&exp.ResultSummary,
+		&exp.EquityCurves,
 	)
 
 	if err != nil {

@@ -28,9 +28,11 @@ type Experiment struct {
 	Name        string                  `json:"name"`
 	Description string                  `json:"description"`
 	Config      CreateExperimentRequest `json:"config"`
-	Status      ExperimentStatus        `json:"status"`
-	CreatedAt   time.Time               `json:"created_at"`
-	StatusLogs  []ExperimentStatusLog   `json:"status_logs,omitempty"`
+	Status        ExperimentStatus        `json:"status"`
+	CreatedAt     time.Time               `json:"created_at"`
+	StatusLogs    []ExperimentStatusLog   `json:"status_logs,omitempty"`
+	ResultSummary map[string]interface{}  `json:"result_summary,omitempty"`
+	EquityCurves  map[string]interface{}  `json:"equity_curves,omitempty"`
 }
 
 type ExperimentStatusLog struct {

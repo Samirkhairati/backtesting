@@ -83,6 +83,7 @@ func (w *Worker) handle(ctx context.Context, record *kgo.Record) error {
 		"SharpeRatio":      report.SharpeRatio,
 		"WinRate":          report.TradeAnalytics.WinRatePct,
 		"TotalTrades":      report.TradeAnalytics.TotalTrades,
+		"EquityCurve":      engine.Portfolio.EquityCurve,
 	}
 
 	w.publishCompleted(ctx, msg, "COMPLETED", resultMap)
