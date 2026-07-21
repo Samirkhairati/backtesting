@@ -71,45 +71,7 @@ func (bc *BacktestingConsumer) handle(ctx context.Context, record *kgo.Record) e
 		if err != nil {
 			logger.Log.Error("Failed to get backtest job metrics", zap.Error(err))
 		} else if len(jobs) > 0 {
-			var totalReturn, annReturn, maxDrawdown, sharpe, winRate, trades float64
-			equityCurves := make(map[string]interface{})
-			jobMetrics := make([]map[string]interface{}, 0)
-			
-			for _, job := range jobs {
-				label := job.Symbol + " - " + job.StrategyName
-				
-				var tr, md, wr float64
-				if v, ok := job.ResultMetrics["TotalReturn"].(float64); ok { tr = v; totalReturn += v }
-				if ar, ok := job.ResultMetrics["AnnualizedReturn"].(float64); ok { annReturn += ar }
-				if v, ok := job.ResultMetrics["MaxDrawdown"].(float64); ok { md = v; maxDrawdown += v }
-				if sr, ok := job.ResultMetrics["SharpeRatio"].(float64); ok { sharpe += sr }
-				if v, ok := job.ResultMetrics["WinRate"].(float64); ok { wr = v; winRate += v }
-				if tt, ok := job.ResultMetrics["TotalTrades"].(float64); ok { trades += tt }
-				
-				if ec, ok := job.ResultMetrics["EquityCurve"]; ok {
-					equityCurves[label] = ec
-				}
-				
-				jobMetrics = append(jobMetrics, map[string]interface{}{
-					"Symbol": job.Symbol,
-					"Strategy": job.StrategyName,
-					"TotalReturn": tr,
-					"MaxDrawdown": md,
-					"WinRate": wr,
-				})
-			}
-
-			count := float64(len(jobs))
-			resultSummary := map[string]interface{}{
-				"TotalReturn":      totalReturn / count,
-				"AnnualizedReturn": annReturn / count,
-				"MaxDrawdown":      maxDrawdown / count,
-				"SharpeRatio":      sharpe / count,
-				"WinRate":          winRate / count,
-				"TotalTrades":      trades, // Sum of trades
-				"JobMetrics":       jobMetrics,
-			}
-
+			resultSummary, equityCurves := AggregateJobMetrics(jobs)
 			if err := bc.Repo.UpdateExperimentResults(ctx, msg.ExperimentID, resultSummary, equityCurves); err != nil {
 				logger.Log.Error("Failed to update experiment results", zap.Error(err))
 			}
@@ -127,4 +89,78 @@ func (bc *BacktestingConsumer) handle(ctx context.Context, record *kgo.Record) e
 	}
 
 	return nil
+}
+
+// AggregateJobMetrics processes a slice of BacktestJob models and computes aggregate metrics 
+// across all jobs. It returns a result summary map and an equity curves map.
+func AggregateJobMetrics(jobs []models.BacktestJob) (map[string]interface{}, map[string]interface{}) {
+	var totalReturn, annReturn, maxDrawdown, sharpe, winRate, trades float64
+	equityCurves := make(map[string]interface{})
+	jobMetrics := make([]map[string]interface{}, 0)
+
+	for _, job := range jobs {
+		label := job.Symbol + " - " + job.StrategyName
+
+		var tr, md, wr float64
+		if v, ok := job.ResultMetrics["TotalReturn"].(float64); ok {
+			tr = v
+			totalReturn += v
+		}
+		if ar, ok := job.ResultMetrics["AnnualizedReturn"].(float64); ok {
+			annReturn += ar
+		}
+		if v, ok := job.ResultMetrics["MaxDrawdown"].(float64); ok {
+			md = v
+			maxDrawdown += v
+		}
+		if sr, ok := job.ResultMetrics["SharpeRatio"].(float64); ok {
+			sharpe += sr
+		}
+		if v, ok := job.ResultMetrics["WinRate"].(float64); ok {
+			wr = v
+			winRate += v
+		}
+		if tt, ok := job.ResultMetrics["TotalTrades"].(float64); ok {
+			trades += tt
+		}
+
+		if ec, ok := job.ResultMetrics["EquityCurve"]; ok {
+			equityCurves[label] = ec
+		}
+
+		jobMetrics = append(jobMetrics, map[string]interface{}{
+			"Symbol":      job.Symbol,
+			"Strategy":    job.StrategyName,
+			"TotalReturn": tr,
+			"MaxDrawdown": md,
+			"WinRate":     wr,
+		})
+	}
+
+	count := float64(len(jobs))
+	var resultSummary map[string]interface{}
+	
+	if count > 0 {
+		resultSummary = map[string]interface{}{
+			"TotalReturn":      totalReturn / count,
+			"AnnualizedReturn": annReturn / count,
+			"MaxDrawdown":      maxDrawdown / count,
+			"SharpeRatio":      sharpe / count,
+			"WinRate":          winRate / count,
+			"TotalTrades":      trades, // Sum of trades
+			"JobMetrics":       jobMetrics,
+		}
+	} else {
+		resultSummary = map[string]interface{}{
+			"TotalReturn":      0.0,
+			"AnnualizedReturn": 0.0,
+			"MaxDrawdown":      0.0,
+			"SharpeRatio":      0.0,
+			"WinRate":          0.0,
+			"TotalTrades":      0.0,
+			"JobMetrics":       jobMetrics,
+		}
+	}
+
+	return resultSummary, equityCurves
 }

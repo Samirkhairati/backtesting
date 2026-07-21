@@ -21,3 +21,10 @@ migrate create -ext sql -dir core/db/migrations -seq your_migration_name
 ```bash
 docker compose down -v
 ```
+
+**Start Platform with Scaled Workers**
+```bash
+# By default, Docker Compose runs 1 instance of each service.
+# You can scale backtesting workers (worker-dev) and ingestion workers (ingestion-dev) like this:
+docker compose --profile dev up -d --scale worker-dev=5 --scale ingestion-dev=3
+```
