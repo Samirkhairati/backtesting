@@ -73,20 +73,30 @@ func (bc *BacktestingConsumer) handle(ctx context.Context, record *kgo.Record) e
 		} else if len(jobs) > 0 {
 			var totalReturn, annReturn, maxDrawdown, sharpe, winRate, trades float64
 			equityCurves := make(map[string]interface{})
+			jobMetrics := make([]map[string]interface{}, 0)
 			
 			for _, job := range jobs {
 				label := job.Symbol + " - " + job.StrategyName
 				
-				if tr, ok := job.ResultMetrics["TotalReturn"].(float64); ok { totalReturn += tr }
+				var tr, md, wr float64
+				if v, ok := job.ResultMetrics["TotalReturn"].(float64); ok { tr = v; totalReturn += v }
 				if ar, ok := job.ResultMetrics["AnnualizedReturn"].(float64); ok { annReturn += ar }
-				if md, ok := job.ResultMetrics["MaxDrawdown"].(float64); ok { maxDrawdown += md }
+				if v, ok := job.ResultMetrics["MaxDrawdown"].(float64); ok { md = v; maxDrawdown += v }
 				if sr, ok := job.ResultMetrics["SharpeRatio"].(float64); ok { sharpe += sr }
-				if wr, ok := job.ResultMetrics["WinRate"].(float64); ok { winRate += wr }
+				if v, ok := job.ResultMetrics["WinRate"].(float64); ok { wr = v; winRate += v }
 				if tt, ok := job.ResultMetrics["TotalTrades"].(float64); ok { trades += tt }
 				
 				if ec, ok := job.ResultMetrics["EquityCurve"]; ok {
 					equityCurves[label] = ec
 				}
+				
+				jobMetrics = append(jobMetrics, map[string]interface{}{
+					"Symbol": job.Symbol,
+					"Strategy": job.StrategyName,
+					"TotalReturn": tr,
+					"MaxDrawdown": md,
+					"WinRate": wr,
+				})
 			}
 
 			count := float64(len(jobs))
@@ -97,6 +107,7 @@ func (bc *BacktestingConsumer) handle(ctx context.Context, record *kgo.Record) e
 				"SharpeRatio":      sharpe / count,
 				"WinRate":          winRate / count,
 				"TotalTrades":      trades, // Sum of trades
+				"JobMetrics":       jobMetrics,
 			}
 
 			if err := bc.Repo.UpdateExperimentResults(ctx, msg.ExperimentID, resultSummary, equityCurves); err != nil {

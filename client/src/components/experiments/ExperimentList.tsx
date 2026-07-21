@@ -67,7 +67,7 @@ export function ExperimentList({
                 {experiments.map((exp) => (
                   <TableRow 
                     key={exp.id} 
-                    className={`cursor-pointer transition-colors ${selectedExperimentId === exp.id ? 'bg-primary/20 hover:bg-primary/30' : 'hover:bg-primary/5'}`}
+                    className={`cursor-pointer transition-colors ${selectedExperimentId === exp.id ? 'bg-muted/50 hover:bg-muted/70' : 'hover:bg-primary/5'}`}
                     onClick={() => setSelectedExperimentId(exp.id)}
                   >
                     <TableCell className="font-medium">

@@ -2,10 +2,10 @@ import { useQuery } from '@tanstack/react-query'
 import { useState, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { MultiSelect } from "@/components/ui/multi-select"
 import { fetchExperimentById } from '@/lib/api'
 import { formatDuration } from '@/lib/formatters'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 
 interface EquityPoint {
   Timestamp: string;
@@ -13,7 +13,7 @@ interface EquityPoint {
 }
 
 export function ExperimentDetails({ experimentId }: { experimentId: string }) {
-  const [selectedCurve, setSelectedCurve] = useState<string>('Average')
+  const [selectedCurves, setSelectedCurves] = useState<string[]>(['Average'])
 
   const { data: exp, isLoading } = useQuery({
     queryKey: ['experiment', experimentId],
@@ -27,38 +27,43 @@ export function ExperimentDetails({ experimentId }: { experimentId: string }) {
   });
 
   const chartData = useMemo(() => {
-    if (!exp) return [];
+    if (!exp || selectedCurves.length === 0) return [];
     const equityCurves = exp.equity_curves || {};
     
-    if (selectedCurve === 'Average' && Object.keys(equityCurves).length > 0) {
-      const allTimestamps = new Set<string>();
-      Object.values(equityCurves).forEach((curve: unknown) => {
-        (curve as EquityPoint[]).forEach((pt) => allTimestamps.add(pt.Timestamp));
-      });
-      const sortedTimestamps = Array.from(allTimestamps).sort();
-      return sortedTimestamps.map(ts => {
-        let sum = 0;
-        let count = 0;
-        Object.values(equityCurves).forEach((curve: unknown) => {
-          const pt = (curve as EquityPoint[]).find((p) => p.Timestamp === ts);
-          if (pt) {
-            sum += pt.Value;
-            count++;
-          }
-        });
-        return {
-          Timestamp: new Date(ts).toLocaleDateString(),
-          Value: count > 0 ? sum / count : 0
-        };
-      });
-    } else if (equityCurves[selectedCurve]) {
-      return (equityCurves[selectedCurve] as EquityPoint[]).map((pt) => ({
-        Timestamp: new Date(pt.Timestamp).toLocaleDateString(),
-        Value: pt.Value
-      }));
-    }
-    return [];
-  }, [exp, selectedCurve]);
+    // Map of timestamp -> data point
+    const dataByTs: Record<string, Record<string, string | number>> = {};
+
+    selectedCurves.forEach(curveName => {
+      if (curveName === 'Average') {
+         // calculate average curve once
+         const allPts: Record<string, { sum: number, count: number }> = {};
+         Object.values(equityCurves).forEach((curve: unknown) => {
+           (curve as EquityPoint[]).forEach(pt => {
+              if (!allPts[pt.Timestamp]) allPts[pt.Timestamp] = { sum: 0, count: 0 };
+              allPts[pt.Timestamp].sum += pt.Value;
+              allPts[pt.Timestamp].count += 1;
+           });
+         });
+         Object.entries(allPts).forEach(([ts, { sum, count }]) => {
+           if (!dataByTs[ts]) dataByTs[ts] = { Timestamp: ts };
+           dataByTs[ts]['Average'] = sum / count;
+         });
+      } else if (equityCurves[curveName]) {
+         (equityCurves[curveName] as EquityPoint[]).forEach((pt: EquityPoint) => {
+           if (!dataByTs[pt.Timestamp]) dataByTs[pt.Timestamp] = { Timestamp: pt.Timestamp };
+           dataByTs[pt.Timestamp][curveName] = pt.Value;
+         });
+      }
+    });
+
+    const sortedTimestamps = Object.keys(dataByTs).sort();
+    return sortedTimestamps.map(ts => {
+      return {
+        ...dataByTs[ts],
+        Timestamp: new Date(ts).toLocaleDateString(),
+      };
+    });
+  }, [exp, selectedCurves]);
 
   if (isLoading || !exp) {
     return (
@@ -72,6 +77,10 @@ export function ExperimentDetails({ experimentId }: { experimentId: string }) {
   const resultSummary = exp.result_summary;
   const equityCurves = exp.equity_curves || {};
   const curveKeys = ['Average', ...Object.keys(equityCurves)];
+  const COLORS = [
+    '#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6',
+    '#ec4899', '#06b6d4', '#14b8a6', '#f97316', '#6366f1',
+  ];
 
   return (
     <Card className="border-primary/20 bg-black/40 backdrop-blur-md h-full flex flex-col">
@@ -126,18 +135,14 @@ export function ExperimentDetails({ experimentId }: { experimentId: string }) {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h3 className="font-mono uppercase tracking-widest text-xs text-muted-foreground">Equity Curve</h3>
-              <Select value={selectedCurve} onValueChange={setSelectedCurve}>
-                <SelectTrigger className="w-[200px] h-8 text-xs font-mono">
-                  <SelectValue placeholder="Select curve" />
-                </SelectTrigger>
-                <SelectContent>
-                  {curveKeys.map(key => (
-                    <SelectItem key={key} value={key} className="text-xs font-mono">
-                      {key}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="w-[300px]">
+                <MultiSelect 
+                  options={curveKeys.map(k => ({ label: k, value: k }))} 
+                  selected={selectedCurves} 
+                  onChange={setSelectedCurves}
+                  placeholder="Select curves" 
+                />
+              </div>
             </div>
             <div className="w-full h-64 border border-border/50 rounded bg-black/20 p-4">
               <ResponsiveContainer width="100%" height="100%">
@@ -150,7 +155,17 @@ export function ExperimentDetails({ experimentId }: { experimentId: string }) {
                     itemStyle={{ color: '#fff' }}
                     labelStyle={{ color: '#888' }}
                   />
-                  <Line type="monotone" dataKey="Value" stroke="#3b82f6" strokeWidth={2} dot={false} />
+                  <Legend wrapperStyle={{ fontSize: '12px', color: '#888', paddingTop: '10px' }} />
+                  {selectedCurves.map((curve, idx) => (
+                    <Line 
+                      key={curve} 
+                      type="monotone" 
+                      dataKey={curve} 
+                      stroke={COLORS[idx % COLORS.length]} 
+                      strokeWidth={2} 
+                      dot={false} 
+                    />
+                  ))}
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -162,6 +177,38 @@ export function ExperimentDetails({ experimentId }: { experimentId: string }) {
               <span className="font-mono text-sm text-muted-foreground/50">
                 {exp.status === 'COMPLETED' ? 'No curve data' : 'Chart will be available when completed'}
               </span>
+            </div>
+          </div>
+        )}
+
+        {exp.status === 'COMPLETED' && resultSummary?.JobMetrics && (
+          <div className="space-y-2">
+            <h3 className="font-mono uppercase tracking-widest text-xs text-muted-foreground">Results By Symbol</h3>
+            <div className="rounded-md border border-border/50 overflow-hidden">
+              <Table className="table-fixed w-full">
+                <TableHeader className="bg-muted/50">
+                  <TableRow>
+                    <TableHead className="font-mono uppercase text-xs w-[20%]">Symbol</TableHead>
+                    <TableHead className="font-mono uppercase text-xs w-[40%]">Strategy</TableHead>
+                    <TableHead className="font-mono uppercase text-xs text-right">Return %</TableHead>
+                    <TableHead className="font-mono uppercase text-xs text-right">Max Drawdown</TableHead>
+                    <TableHead className="font-mono uppercase text-xs text-right">Win Rate</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {([...resultSummary.JobMetrics] as { Symbol: string, Strategy: string, TotalReturn?: number, MaxDrawdown?: number, WinRate?: number }[])
+                    .sort((a, b) => a.Symbol.localeCompare(b.Symbol))
+                    .map((job, idx) => (
+                    <TableRow key={idx} className="hover:bg-primary/5 transition-colors">
+                      <TableCell className="font-medium">{job.Symbol}</TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">{job.Strategy}</TableCell>
+                      <TableCell className="text-right font-mono text-xs tabular-nums">{job.TotalReturn?.toFixed(2)}%</TableCell>
+                      <TableCell className="text-right font-mono text-xs tabular-nums text-red-500">{job.MaxDrawdown?.toFixed(2)}%</TableCell>
+                      <TableCell className="text-right font-mono text-xs tabular-nums">{job.WinRate?.toFixed(2)}%</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           </div>
         )}
