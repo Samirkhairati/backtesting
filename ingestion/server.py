@@ -7,6 +7,7 @@ import uuid
 import threading
 from kafka import KafkaConsumer, KafkaProducer
 from processor import JobProcessor
+import redis
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -16,6 +17,7 @@ if not DB_URL:
     raise ValueError("DATABASE_URL environment variable is not set and is required")
 
 KAFKA_BROKERS = os.environ.get("KAFKA_BROKERS", "kafka:9092").split(",")
+REDIS_URL = os.environ.get("REDIS_URL", "redis:6379")
 WORKER_ID = str(uuid.uuid4())
 
 def heartbeat_loop(producer):
@@ -81,6 +83,11 @@ if __name__ == '__main__':
         
         logger.info(f"Processing job {job_id} for {symbol}")
         
+        if processor.db_handler.is_job_cancelled(job_id, "ingestion_jobs"):
+            logger.info(f"Skipping cancelled job {job_id}")
+            consumer.commit()
+            continue
+        
         # Announce job started to claim it
         started_msg = {
             "job_id": job_id,
@@ -99,6 +106,14 @@ if __name__ == '__main__':
             'status': status
         }, key=job_id)
         producer.flush()
+
+        if status == "COMPLETED":
+            try:
+                r = redis.Redis.from_url(f"redis://{REDIS_URL}")
+                r.delete(f"bars:{symbol}")
+                logger.info(f"Invalidated Redis cache for {symbol}")
+            except Exception as e:
+                logger.error(f"Failed to invalidate Redis cache: {e}")
         
         # Commit only after successful processing and publishing
         consumer.commit()

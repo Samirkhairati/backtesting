@@ -53,7 +53,7 @@ func (s *ExperimentService) CreateExperiment(ctx context.Context, userID, name, 
 	var missingSymbols []string
 	for _, sym := range config.Symbols {
 		covStart, covEnd, err := s.Repo.GetMarketDataCoverage(ctx, sym)
-		if err != nil || startDateT.Before(covStart) || endDateT.After(covEnd) {
+		if err != nil || reqStart < covStart || reqEnd > covEnd {
 			missingSymbols = append(missingSymbols, sym)
 		}
 	}

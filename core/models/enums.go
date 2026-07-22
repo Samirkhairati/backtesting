@@ -35,6 +35,7 @@ const (
 	EventTypeBacktestingJobCompleted EventType = "BACKTESTING_JOB_COMPLETED"
 	EventTypeBacktestingCompleted    EventType = "BACKTESTING_COMPLETED"
 	EventTypeAggregationStarted      EventType = "AGGREGATION_STARTED"
+	EventTypeAggregationProgress     EventType = "AGGREGATION_PROGRESS"
 	EventTypeAggregationCompleted    EventType = "AGGREGATION_COMPLETED"
 	EventTypeExperimentCancelled     EventType = "EXPERIMENT_CANCELLED"
 )

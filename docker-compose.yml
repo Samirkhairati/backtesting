@@ -175,7 +175,7 @@ services:
       - "${CLIENT_HOST_PORT}:5173"
     volumes:
       - ./client:/app
-      - /app/node_modules
+    command: sh -c "pnpm install && pnpm run dev --host"
 
   client-test:
     build:

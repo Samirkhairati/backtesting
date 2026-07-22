@@ -85,7 +85,7 @@ func TestAggregation_Integration(t *testing.T) {
 		t.Fatalf("Expected 2 jobs, got %d", len(jobs))
 	}
 
-	resultSummary, equityCurves := AggregateJobMetrics(jobs)
+	resultSummary, equityCurves := AggregateJobMetrics(jobs, nil)
 
 	// 5. Update experiment results
 	err = repo.UpdateExperimentResults(ctx, expID, resultSummary, equityCurves)

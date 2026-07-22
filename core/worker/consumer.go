@@ -14,6 +14,7 @@ import (
 	"github.com/samirkhairati/backtesting/core/portfolio"
 	"github.com/samirkhairati/backtesting/core/simulator"
 	"github.com/samirkhairati/backtesting/core/strategy"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"go.uber.org/zap"
 )
@@ -22,10 +23,11 @@ type Worker struct {
 	ID       string
 	Store    store.Store
 	Producer kafka.Publisher
+	Pool     *pgxpool.Pool
 	consumer *kafka.Consumer
 }
 
-func NewWorker(brokers []string, dbStore store.Store, producer kafka.Publisher) (*Worker, error) {
+func NewWorker(brokers []string, dbStore store.Store, producer kafka.Publisher, pool *pgxpool.Pool) (*Worker, error) {
 	consumer, err := kafka.NewConsumer(brokers, "worker-group", "backtesting-jobs")
 	if err != nil {
 		return nil, err
@@ -34,6 +36,7 @@ func NewWorker(brokers []string, dbStore store.Store, producer kafka.Publisher) 
 		ID:       uuid.New().String(),
 		Store:    dbStore,
 		Producer: producer,
+		Pool:     pool,
 		consumer: consumer,
 	}, nil
 }
@@ -76,6 +79,14 @@ func (w *Worker) handle(ctx context.Context, record *kgo.Record) error {
 	}
 
 	logger.Log.Info("Starting backtest job", zap.String("job_id", msg.JobID), zap.String("symbol", msg.Symbol), zap.String("worker_id", w.ID))
+
+	// Check if job is cancelled
+	var status string
+	err := w.Pool.QueryRow(ctx, "SELECT status FROM backtest_jobs WHERE id=$1", msg.JobID).Scan(&status)
+	if err == nil && status == "CANCELLED" {
+		logger.Log.Info("Skipping cancelled job", zap.String("job_id", msg.JobID))
+		return nil
+	}
 
 	// Publish job-started event
 	startedMsg := models.JobStartedMessage{

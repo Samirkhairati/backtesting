@@ -73,6 +73,15 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                 stage: 'Backtesting'
               }
             }));
+          } else if (eventType === 'AGGREGATION_STARTED' || eventType === 'AGGREGATION_PROGRESS') {
+            setProgressMap(prev => ({
+              ...prev,
+              [exp.id]: {
+                totalJobs: eventData.total_jobs || 0,
+                completedJobs: eventData.completed_jobs || 0,
+                stage: 'Aggregating'
+              }
+            }));
           } else if (['BACKTESTING_COMPLETED', 'EXPERIMENT_CANCELLED', 'EXPERIMENT_FAILED', 'AGGREGATION_COMPLETED'].includes(eventType)) {
             setProgressMap(prev => {
               const next = { ...prev };

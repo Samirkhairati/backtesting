@@ -123,7 +123,7 @@ func TestAggregateJobMetrics(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			summary, equityCurves := AggregateJobMetrics(tt.jobs)
+			summary, equityCurves := AggregateJobMetrics(tt.jobs, nil)
 
 			// Check averaged values and sum
 			for key, expectedValue := range tt.expectedSum {

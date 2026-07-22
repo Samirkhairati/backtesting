@@ -103,7 +103,14 @@ func (bc *BacktestingConsumer) handle(ctx context.Context, record *kgo.Record) e
 			go func(expID string, jobs []models.BacktestJob, tot, comp int) {
 				bgCtx := context.Background()
 				if len(jobs) > 0 {
-					resultSummary, equityCurves := AggregateJobMetrics(jobs)
+					resultSummary, equityCurves := AggregateJobMetrics(jobs, func(comp, tot int) {
+						bc.Producer.Publish(bgCtx, "event-stream", expID, models.ExperimentEvent{
+							ExperimentID:  expID,
+							EventType:     models.EventTypeAggregationProgress,
+							TotalJobs:     tot,
+							CompletedJobs: comp,
+						})
+					})
 					if err := bc.Repo.UpdateExperimentResults(bgCtx, expID, resultSummary, equityCurves); err != nil {
 						logger.Log.Error("Failed to update experiment results", zap.Error(err))
 					}
@@ -136,12 +143,17 @@ func (bc *BacktestingConsumer) handle(ctx context.Context, record *kgo.Record) e
 
 // AggregateJobMetrics processes a slice of BacktestJob models and computes aggregate metrics 
 // across all jobs. It returns a result summary map and an equity curves map.
-func AggregateJobMetrics(jobs []models.BacktestJob) (map[string]interface{}, map[string]interface{}) {
+// It accepts a progress callback invoked periodically with (completed, total).
+func AggregateJobMetrics(jobs []models.BacktestJob, onProgress func(int, int)) (map[string]interface{}, map[string]interface{}) {
 	var totalReturn, annReturn, maxDrawdown, sharpe, winRate, trades float64
 	equityCurves := make(map[string]interface{})
 	jobMetrics := make([]map[string]interface{}, 0)
 
-	for _, job := range jobs {
+	totalJobs := len(jobs)
+	for i, job := range jobs {
+		if onProgress != nil && (i+1)%10 == 0 {
+			onProgress(i+1, totalJobs)
+		}
 		label := job.Symbol + " - " + job.StrategyName
 
 		var tr, md, wr float64

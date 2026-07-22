@@ -10,6 +10,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/samirkhairati/backtesting/core/data/store/postgres"
+	"github.com/samirkhairati/backtesting/core/data/store/cache"
 	"github.com/samirkhairati/backtesting/core/db"
 	"github.com/samirkhairati/backtesting/core/kafka"
 	"github.com/samirkhairati/backtesting/core/logger"
@@ -33,7 +34,11 @@ func main() {
 	pool := db.Setup(ctx)
 	defer pool.Close()
 
-	store := postgres.NewStore(pool)
+	redisClient := db.SetupRedis(ctx)
+	defer redisClient.Close()
+
+	pgStore := postgres.NewStore(pool)
+	store := cache.NewRedisStore(redisClient, pgStore)
 
 	kafkaBrokersStr := os.Getenv("KAFKA_BROKERS")
 	if kafkaBrokersStr == "" {
@@ -47,7 +52,7 @@ func main() {
 	}
 	defer producer.Close()
 
-	w, err := worker.NewWorker(kafkaBrokers, store, producer)
+	w, err := worker.NewWorker(kafkaBrokers, store, producer, pool)
 	if err != nil {
 		log.Fatalf("failed to create worker: %v", err)
 	}

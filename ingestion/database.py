@@ -38,3 +38,17 @@ class DatabaseHandler:
         finally:
             cursor.close()
             conn.close()
+
+    def is_job_cancelled(self, job_id, table="ingestion_jobs"):
+        conn = psycopg2.connect(self.db_url)
+        cursor = conn.cursor()
+        try:
+            query = f"SELECT status FROM {table} WHERE id = %s"
+            cursor.execute(query, (job_id,))
+            res = cursor.fetchone()
+            if res and res[0] == 'CANCELLED':
+                return True
+            return False
+        finally:
+            cursor.close()
+            conn.close()

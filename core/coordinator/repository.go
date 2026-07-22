@@ -51,9 +51,9 @@ func (r *ExperimentRepository) TryTransitionExperimentStatus(ctx context.Context
 	return tag.RowsAffected() > 0, nil
 }
 
-func (r *ExperimentRepository) GetMarketDataCoverage(ctx context.Context, symbol string) (time.Time, time.Time, error) {
-	var covStart, covEnd time.Time
-	err := r.DB.QueryRow(ctx, "SELECT start_date, end_date FROM market_data_coverage WHERE symbol = $1", symbol).Scan(&covStart, &covEnd)
+func (r *ExperimentRepository) GetMarketDataCoverage(ctx context.Context, symbol string) (string, string, error) {
+	var covStart, covEnd string
+	err := r.DB.QueryRow(ctx, "SELECT TO_CHAR(start_date, 'YYYY-MM-DD'), TO_CHAR(end_date, 'YYYY-MM-DD') FROM market_data_coverage WHERE symbol = $1", symbol).Scan(&covStart, &covEnd)
 	return covStart, covEnd, err
 }
 
@@ -165,7 +165,7 @@ func (r *ExperimentRepository) ClaimJob(ctx context.Context, jobID string, worke
 	if err != nil {
 		return fmt.Errorf("ClaimJob: failed to upsert worker: %w", err)
 	}
-	_, err = r.DB.Exec(ctx, "UPDATE backtest_jobs SET status='RUNNING', worker_id=$1 WHERE id=$2", workerID, jobID)
+	_, err = r.DB.Exec(ctx, "UPDATE backtest_jobs SET status='RUNNING', worker_id=$1 WHERE id=$2 AND status IN ('PENDING', 'RUNNING')", workerID, jobID)
 	return err
 }
 
@@ -254,7 +254,7 @@ func (r *ExperimentRepository) ClaimIngestionJob(ctx context.Context, jobID stri
 	if err != nil {
 		return fmt.Errorf("ClaimIngestionJob: failed to upsert worker: %w", err)
 	}
-	_, err = r.DB.Exec(ctx, "UPDATE ingestion_jobs SET status='RUNNING', worker_id=$1 WHERE id=$2", workerID, jobID)
+	_, err = r.DB.Exec(ctx, "UPDATE ingestion_jobs SET status='RUNNING', worker_id=$1 WHERE id=$2 AND status IN ('PENDING', 'RUNNING')", workerID, jobID)
 	return err
 }
 
