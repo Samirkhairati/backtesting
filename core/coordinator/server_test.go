@@ -110,6 +110,12 @@ func TestServer_CreateExperiment_Integration(t *testing.T) {
 
 	s := NewServer(dbPool, nil)
 
+	// Ensure the user exists
+	_, err := dbPool.Exec(ctx, "INSERT INTO users (id, username, password_hash) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING", "00000000-0000-0000-0000-000000000000", "server_test_user", "hash")
+	if err != nil {
+		t.Logf("Failed to insert test user: %v", err)
+	}
+
 	req := &pb.CreateExperimentRequest{
 		UserId:      "00000000-0000-0000-0000-000000000000", // Note: Foreign key constraints might fail if this user doesn't exist
 		Name:        "Integration Exp",
@@ -127,5 +133,41 @@ func TestServer_CreateExperiment_Integration(t *testing.T) {
 		if resp.ExperimentId == "" {
 			t.Errorf("Expected valid ExperimentId, got empty string")
 		}
+	}
+}
+
+func TestServer_CancelExperiment_Unit(t *testing.T) {
+	logger.Init()
+
+	tests := []struct {
+		name        string
+		req         *pb.CancelExperimentRequest
+		mockRow     *mockRow // We don't really use this for Exec, but the mock DB uses Exec which currently returns no error
+		wantErr     bool
+	}{
+		{
+			name: "Success",
+			req: &pb.CancelExperimentRequest{
+				ExperimentId: "exp-123",
+				UserId:       "user-123",
+			},
+			mockRow: &mockRow{err: nil},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := NewServer(&mockDB{row: tt.mockRow}, nil)
+
+			resp, err := s.CancelExperiment(context.Background(), tt.req)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("CancelExperiment() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && !resp.Success {
+				t.Errorf("CancelExperiment() got success = %v, want true", resp.Success)
+			}
+		})
 	}
 }

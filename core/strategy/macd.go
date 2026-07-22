@@ -1,8 +1,6 @@
 package strategy
 
 import (
-	"github.com/samirkhairati/backtesting/core/logger"
-
 	"github.com/samirkhairati/backtesting/core/broker"
 	"github.com/samirkhairati/backtesting/core/data"
 )
@@ -69,7 +67,6 @@ func (s *MACDStrategy) OnBars(b broker.Broker, bars map[string]data.Bar) {
 				affordable := cash * 0.20 // 20% of cash as an arbitrary allocation
 				shares := affordable / bar.Close
 				if shares > 0 {
-					logger.Log.Sugar().Infof("[MACD] %s Bullish Cross. Buying %f shares.", symbol, shares)
 					b.SubmitOrder(symbol, shares)
 				}
 			}
@@ -78,7 +75,6 @@ func (s *MACDStrategy) OnBars(b broker.Broker, bars map[string]data.Bar) {
 		// Bearish Cross
 		if state.prevMACD >= state.prevSignal && macdLine < signalLine {
 			if isLong {
-				logger.Log.Sugar().Infof("[MACD] %s Bearish Cross. Closing position.", symbol)
 				b.ClosePosition(symbol)
 			}
 		}

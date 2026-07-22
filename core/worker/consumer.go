@@ -3,6 +3,9 @@ package worker
 import (
 	"context"
 
+	"time"
+
+	"github.com/google/uuid"
 	"github.com/samirkhairati/backtesting/core/data/store"
 	"github.com/samirkhairati/backtesting/core/kafka"
 	"github.com/samirkhairati/backtesting/core/logger"
@@ -16,6 +19,7 @@ import (
 )
 
 type Worker struct {
+	ID       string
 	Store    store.Store
 	Producer kafka.Publisher
 	consumer *kafka.Consumer
@@ -27,6 +31,7 @@ func NewWorker(brokers []string, dbStore store.Store, producer kafka.Publisher) 
 		return nil, err
 	}
 	return &Worker{
+		ID:       uuid.New().String(),
 		Store:    dbStore,
 		Producer: producer,
 		consumer: consumer,
@@ -34,7 +39,29 @@ func NewWorker(brokers []string, dbStore store.Store, producer kafka.Publisher) 
 }
 
 func (w *Worker) Run(ctx context.Context) {
+	go w.heartbeatLoop(ctx)
 	w.consumer.Run(ctx, w.handle)
+}
+
+func (w *Worker) heartbeatLoop(ctx context.Context) {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			hb := models.WorkerHeartbeat{
+				WorkerID:  w.ID,
+				Timestamp: time.Now(),
+				Status:    "ACTIVE",
+			}
+			if err := w.Producer.Publish(ctx, "worker-heartbeats", w.ID, hb); err != nil {
+				logger.Log.Error("Failed to publish heartbeat", zap.Error(err))
+			}
+		}
+	}
 }
 
 func (w *Worker) Close() {
@@ -48,7 +75,17 @@ func (w *Worker) handle(ctx context.Context, record *kgo.Record) error {
 		return nil // Ignore malformed
 	}
 
-	logger.Log.Info("Starting backtest job", zap.String("job_id", msg.JobID), zap.String("symbol", msg.Symbol))
+	logger.Log.Info("Starting backtest job", zap.String("job_id", msg.JobID), zap.String("symbol", msg.Symbol), zap.String("worker_id", w.ID))
+
+	// Publish job-started event
+	startedMsg := models.JobStartedMessage{
+		JobID:        msg.JobID,
+		ExperimentID: msg.ExperimentID,
+		WorkerID:     w.ID,
+	}
+	if err := w.Producer.Publish(ctx, "backtesting-job-events", msg.JobID, startedMsg); err != nil {
+		logger.Log.Error("Failed to publish job-started event", zap.Error(err))
+	}
 
 	// Instantiate strategy
 	strat, err := strategy.CreateStrategy(msg.StrategyName, msg.Parameters)
@@ -98,6 +135,7 @@ func (w *Worker) publishCompleted(ctx context.Context, msg models.BacktestJobMes
 		ExperimentID:  msg.ExperimentID,
 		Symbol:        msg.Symbol,
 		Status:        status,
+		WorkerID:      w.ID,
 		ResultMetrics: results,
 	}
 	

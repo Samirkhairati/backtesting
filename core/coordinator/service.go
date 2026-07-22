@@ -135,6 +135,10 @@ func (s *ExperimentService) GenerateBacktestJobs(ctx context.Context, experiment
 						logger.Log.Error("Failed to insert backtest job", zap.Error(err))
 						continue
 					}
+					if jobID == "" {
+						// Job already exists (idempotency conflict) — skip publishing
+						continue
+					}
 					totalJobs++
 
 					if s.Producer != nil {
@@ -202,5 +206,23 @@ func generateCombinations(params map[string][]interface{}) []map[string]interfac
 		helper(0, make(map[string]interface{}))
 	}
 	return results
+}
+
+func (s *ExperimentService) CancelExperiment(ctx context.Context, experimentID string) error {
+	logger.Log.Info("Cancelling experiment", zap.String("id", experimentID))
+	
+	if err := s.Repo.CancelExperimentJobs(ctx, experimentID); err != nil {
+		logger.Log.Error("Failed to cancel experiment jobs", zap.Error(err), zap.String("id", experimentID))
+		return err
+	}
+
+	if s.Producer != nil {
+		s.Producer.Publish(ctx, "event-stream", experimentID, models.ExperimentEvent{
+			ExperimentID: experimentID,
+			EventType:    models.EventTypeExperimentCancelled,
+		})
+	}
+	
+	return nil
 }
 

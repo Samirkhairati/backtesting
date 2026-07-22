@@ -82,6 +82,16 @@ func main() {
 	defer backtestingConsumer.Close()
 	go backtestingConsumer.Run(ctx)
 
+	heartbeatConsumer, err := coordinator.NewHeartbeatConsumer(kafkaBrokers, dbPool)
+	if err != nil {
+		log.Fatalf("failed to create heartbeat consumer: %v", err)
+	}
+	defer heartbeatConsumer.Close()
+	go heartbeatConsumer.Run(ctx)
+
+	workerMonitor := coordinator.NewWorkerMonitor(coordinator.NewExperimentRepository(dbPool), producer)
+	go workerMonitor.Run(ctx)
+
 	go func() {
 		logger.Log.Info("Coordinator gRPC server listening", zap.String("port", port))
 		if err := grpcServer.Serve(lis); err != nil {

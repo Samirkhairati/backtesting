@@ -1,7 +1,6 @@
 package broker
 
 import (
-	"github.com/samirkhairati/backtesting/core/logger"
 	"time"
 
 	"github.com/samirkhairati/backtesting/core/data"
@@ -103,7 +102,6 @@ func (m *OrderManager) ExecutePendingOrders(bar data.Bar) {
 		if err != nil {
 			// e.g. ErrInsufficientCash or ErrInsufficientMargin
 			order.Status = OrderStatusRejected
-			logger.Log.Sugar().Infof("[Broker] Order REJECTED: %s %f shares @ $%.2f (Reason: %v)", order.Symbol, order.Quantity, bar.Open, err)
 			// Order is dropped from queue (not appended to remainingOrders)
 			continue
 		}
@@ -118,8 +116,6 @@ func (m *OrderManager) ExecutePendingOrders(bar data.Bar) {
 			Timestamp: bar.Timestamp,
 		}
 		m.Fills = append(m.Fills, fill)
-
-		logger.Log.Sugar().Infof("[Broker] Order FILLED: %s %f shares @ $%.2f", order.Symbol, order.Quantity, bar.Open)
 		// Order is dropped from pending queue
 	}
 

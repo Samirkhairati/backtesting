@@ -57,6 +57,7 @@ func SetupRouter(db *pgxpool.Pool, coordinatorClient pb.CoordinatorServiceClient
 			experiments.POST("", experimentHandler.CreateExperiment)
 			experiments.GET("", experimentHandler.GetExperiments)
 			experiments.GET("/:id", experimentHandler.GetExperimentByID)
+			experiments.POST("/:id/cancel", experimentHandler.CancelExperiment)
 			experiments.GET("/:id/events", eventHandler.StreamEvents)
 		}
 

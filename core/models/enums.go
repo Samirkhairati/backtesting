@@ -12,6 +12,7 @@ const (
 	ExperimentStatusAggregating      ExperimentStatus = "AGGREGATING"
 	ExperimentStatusCompleted        ExperimentStatus = "COMPLETED"
 	ExperimentStatusFailed           ExperimentStatus = "FAILED"
+	ExperimentStatusCancelled        ExperimentStatus = "CANCELLED"
 )
 
 // IngestionJobStatus defines the possible states of an ingestion job
@@ -35,4 +36,5 @@ const (
 	EventTypeBacktestingCompleted    EventType = "BACKTESTING_COMPLETED"
 	EventTypeAggregationStarted      EventType = "AGGREGATION_STARTED"
 	EventTypeAggregationCompleted    EventType = "AGGREGATION_COMPLETED"
+	EventTypeExperimentCancelled     EventType = "EXPERIMENT_CANCELLED"
 )

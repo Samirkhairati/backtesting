@@ -244,7 +244,11 @@ services:
         rpk topic create ingestion-jobs -p 10 -r 1 --brokers kafka:9092 || true &&
         rpk topic create ingestion-completed-jobs -p 3 -r 1 --brokers kafka:9092 || true &&
         rpk topic create backtesting-jobs -p 10 -r 1 --brokers kafka:9092 || true &&
-        rpk topic create backtesting-completed-jobs -p 3 -r 1 --brokers kafka:9092 || true
+        rpk topic create backtesting-completed-jobs -p 3 -r 1 --brokers kafka:9092 || true &&
+        rpk topic create worker-heartbeats -p 3 -r 1 --brokers kafka:9092 || true &&
+        rpk topic create backtesting-job-events -p 3 -r 1 --brokers kafka:9092 || true &&
+        rpk topic create ingestion-job-events -p 3 -r 1 --brokers kafka:9092 || true &&
+        rpk topic create event-stream -p 3 -r 1 --brokers kafka:9092 || true
 
   redis:
     image: redis:7-alpine

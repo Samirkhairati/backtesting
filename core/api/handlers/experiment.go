@@ -171,3 +171,33 @@ func (h *ExperimentHandler) GetExperimentByID(c *gin.Context) {
 
 	c.JSON(http.StatusOK, exp)
 }
+
+// CancelExperiment cancels a pending or running experiment
+func (h *ExperimentHandler) CancelExperiment(c *gin.Context) {
+	userID := c.MustGet("user_id").(string)
+	expID := c.Param("id")
+
+	// Make sure the experiment belongs to the user
+	var exists bool
+	err := h.DB.QueryRow(context.Background(), "SELECT EXISTS(SELECT 1 FROM experiments WHERE id = $1 AND user_id = $2)", expID, userID).Scan(&exists)
+	if err != nil || !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Experiment not found"})
+		return
+	}
+
+	grpcReq := &pb.CancelExperimentRequest{
+		ExperimentId: expID,
+		UserId:       userID,
+	}
+
+	_, err = h.CoordinatorClient.CancelExperiment(c.Request.Context(), grpcReq)
+	if err != nil {
+		logger.Log.Error("Failed to cancel experiment via Coordinator", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cancel experiment in coordinator"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Experiment cancelled successfully",
+	})
+}

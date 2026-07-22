@@ -1,0 +1,3 @@
+ALTER TABLE ingestion_jobs
+ADD COLUMN worker_id UUID REFERENCES workers(id) ON DELETE SET NULL,
+ADD COLUMN retry_count INT NOT NULL DEFAULT 0;

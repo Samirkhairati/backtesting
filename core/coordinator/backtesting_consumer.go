@@ -18,7 +18,7 @@ type BacktestingConsumer struct {
 }
 
 func NewBacktestingConsumer(brokers []string, db DBQuerier, producer kafka.Publisher) (*BacktestingConsumer, error) {
-	consumer, err := kafka.NewConsumer(brokers, "coordinator-group-backtesting", "backtesting-completed-jobs")
+	consumer, err := kafka.NewConsumer(brokers, "coordinator-group-backtesting", "backtesting-completed-jobs", "backtesting-job-events")
 	if err != nil {
 		return nil, err
 	}
@@ -39,6 +39,20 @@ func (bc *BacktestingConsumer) Close() {
 }
 
 func (bc *BacktestingConsumer) handle(ctx context.Context, record *kgo.Record) error {
+	if record.Topic == "backtesting-job-events" {
+		var msg models.JobStartedMessage
+		if err := bc.consumer.Unmarshal(record, &msg); err != nil {
+			logger.Log.Error("Failed to unmarshal job started message", zap.Error(err))
+			return nil
+		}
+		
+		if err := bc.Repo.ClaimJob(ctx, msg.JobID, msg.WorkerID); err != nil {
+			logger.Log.Error("Failed to claim job", zap.Error(err), zap.String("job_id", msg.JobID))
+			return err
+		}
+		return nil
+	}
+
 	var msg models.BacktestCompletedMessage
 	if err := bc.consumer.Unmarshal(record, &msg); err != nil {
 		logger.Log.Error("Failed to unmarshal backtesting completed message", zap.Error(err))
@@ -67,8 +81,12 @@ func (bc *BacktestingConsumer) handle(ctx context.Context, record *kgo.Record) e
 	})
 
 	if pending == 0 {
-		if err := bc.Repo.UpdateExperimentStatus(ctx, msg.ExperimentID, models.ExperimentStatusAggregating); err != nil {
+		updated, err := bc.Repo.TryTransitionExperimentStatus(ctx, msg.ExperimentID, models.ExperimentStatusRunning, models.ExperimentStatusAggregating)
+		if err != nil {
 			return err
+		}
+		if !updated {
+			return nil // Another worker already started aggregation
 		}
 		bc.Producer.Publish(ctx, "event-stream", msg.ExperimentID, models.ExperimentEvent{
 			ExperimentID:  msg.ExperimentID,

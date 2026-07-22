@@ -1,12 +1,13 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { MultiSelect } from "@/components/ui/multi-select"
-import { fetchExperimentById } from '@/lib/api'
+import { fetchExperimentById, cancelExperiment } from '@/lib/api'
 import { formatDuration } from '@/lib/formatters'
 import { Button } from '@/components/ui/button'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { StopCircle } from 'lucide-react'
 
 interface EquityPoint {
   Timestamp: string;
@@ -14,6 +15,7 @@ interface EquityPoint {
 }
 
 export function ExperimentDetails({ experimentId }: { experimentId: string }) {
+  const queryClient = useQueryClient()
   const [selectedCurves, setSelectedCurves] = useState<string[]>(['Average'])
   const [page, setPage] = useState(0)
   const pageSize = 10
@@ -24,8 +26,16 @@ export function ExperimentDetails({ experimentId }: { experimentId: string }) {
     refetchInterval: (query) => {
       // Auto refetch every 2s if it's not in a terminal state
       const expData = query.state.data as { status: string } | undefined;
-      if (!expData || expData.status === 'COMPLETED' || expData.status === 'FAILED') return false;
+      if (!expData || ['COMPLETED', 'FAILED', 'CANCELLED'].includes(expData.status)) return false;
       return 2000;
+    }
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: () => cancelExperiment(experimentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['experiment', experimentId] })
+      queryClient.invalidateQueries({ queryKey: ['experiments'] })
     }
   });
 
@@ -84,12 +94,32 @@ export function ExperimentDetails({ experimentId }: { experimentId: string }) {
     '#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6',
     '#ec4899', '#06b6d4', '#14b8a6', '#f97316', '#6366f1',
   ];
+  
+  const isTerminal = ['COMPLETED', 'FAILED', 'CANCELLED'].includes(exp.status);
 
   return (
     <Card className="border-primary/20 bg-black/40 backdrop-blur-md h-full flex flex-col">
-      <CardHeader>
-        <CardTitle className="font-mono text-lg text-primary">{exp.name}</CardTitle>
-        <CardDescription className="truncate">{exp.description || 'No description provided'}</CardDescription>
+      <CardHeader className="flex flex-row items-start justify-between">
+        <div>
+          <CardTitle className="font-mono text-lg text-primary">{exp.name}</CardTitle>
+          <CardDescription className="truncate">{exp.description || 'No description provided'}</CardDescription>
+        </div>
+        {!isTerminal && (
+          <Button 
+            variant="destructive" 
+            size="sm" 
+            className="font-mono text-xs gap-1"
+            onClick={() => {
+              if(confirm('Are you sure you want to cancel this experiment?')) {
+                cancelMutation.mutate()
+              }
+            }}
+            disabled={cancelMutation.isPending}
+          >
+            <StopCircle className="h-4 w-4" />
+            {cancelMutation.isPending ? 'Cancelling...' : 'Cancel'}
+          </Button>
+        )}
       </CardHeader>
       
       <CardContent className="flex-1 space-y-6">

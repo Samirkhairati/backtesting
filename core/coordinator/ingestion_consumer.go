@@ -17,7 +17,7 @@ type IngestionConsumer struct {
 }
 
 func NewIngestionConsumer(brokers []string, db DBQuerier, producer kafka.Publisher) (*IngestionConsumer, error) {
-	consumer, err := kafka.NewConsumer(brokers, "coordinator-group", "ingestion-completed-jobs")
+	consumer, err := kafka.NewConsumer(brokers, "coordinator-group", "ingestion-completed-jobs", "ingestion-job-events")
 	if err != nil {
 		return nil, err
 	}
@@ -38,6 +38,19 @@ func (ic *IngestionConsumer) Close() {
 }
 
 func (ic *IngestionConsumer) handle(ctx context.Context, record *kgo.Record) error {
+	if record.Topic == "ingestion-job-events" {
+		var msg models.JobStartedMessage
+		if err := ic.consumer.Unmarshal(record, &msg); err != nil {
+			logger.Log.Error("Failed to unmarshal ingestion job started message", zap.Error(err))
+			return nil
+		}
+		if err := ic.Repo.ClaimIngestionJob(ctx, msg.JobID, msg.WorkerID); err != nil {
+			logger.Log.Error("Failed to claim ingestion job", zap.Error(err), zap.String("job_id", msg.JobID))
+			return err
+		}
+		return nil
+	}
+
 	var msg models.IngestionCompletedMessage
 	if err := ic.consumer.Unmarshal(record, &msg); err != nil {
 		logger.Log.Error("Failed to unmarshal ingestion completed message", zap.Error(err))
@@ -64,8 +77,12 @@ func (ic *IngestionConsumer) handle(ctx context.Context, record *kgo.Record) err
 	})
 
 	if pending == 0 {
-		if err := ic.Repo.UpdateExperimentStatus(ctx, msg.ExperimentID, models.ExperimentStatusIngested); err != nil {
+		updated, err := ic.Repo.TryTransitionExperimentStatus(ctx, msg.ExperimentID, models.ExperimentStatusPendingIngestion, models.ExperimentStatusIngested)
+		if err != nil {
 			return err
+		}
+		if !updated {
+			return nil // Another worker already completed this transition
 		}
 		ic.Producer.Publish(ctx, "event-stream", msg.ExperimentID, models.ExperimentEvent{
 			ExperimentID:  msg.ExperimentID,

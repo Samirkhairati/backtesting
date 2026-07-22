@@ -42,3 +42,14 @@ func (s *Server) CreateExperiment(ctx context.Context, req *pb.CreateExperimentR
 		Status:       status,
 	}, nil
 }
+
+func (s *Server) CancelExperiment(ctx context.Context, req *pb.CancelExperimentRequest) (*pb.CancelExperimentResponse, error) {
+	err := s.service.CancelExperiment(ctx, req.ExperimentId)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pb.CancelExperimentResponse{
+		Success: true,
+	}, nil
+}

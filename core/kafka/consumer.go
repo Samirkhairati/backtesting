@@ -12,11 +12,11 @@ type Consumer struct {
 	client *kgo.Client
 }
 
-func NewConsumer(brokers []string, groupID, topic string) (*Consumer, error) {
+func NewConsumer(brokers []string, groupID string, topics ...string) (*Consumer, error) {
 	client, err := kgo.NewClient(
 		kgo.SeedBrokers(brokers...),
 		kgo.ConsumerGroup(groupID),
-		kgo.ConsumeTopics(topic),
+		kgo.ConsumeTopics(topics...),
 		kgo.DisableAutoCommit(), // Commit manually after successful processing
 	)
 	if err != nil {

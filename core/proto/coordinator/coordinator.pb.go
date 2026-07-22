@@ -142,6 +142,102 @@ func (x *CreateExperimentResponse) GetStatus() string {
 	return ""
 }
 
+type CancelExperimentRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ExperimentId  string                 `protobuf:"bytes,1,opt,name=experiment_id,json=experimentId,proto3" json:"experiment_id,omitempty"`
+	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CancelExperimentRequest) Reset() {
+	*x = CancelExperimentRequest{}
+	mi := &file_core_proto_coordinator_coordinator_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelExperimentRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelExperimentRequest) ProtoMessage() {}
+
+func (x *CancelExperimentRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_core_proto_coordinator_coordinator_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelExperimentRequest.ProtoReflect.Descriptor instead.
+func (*CancelExperimentRequest) Descriptor() ([]byte, []int) {
+	return file_core_proto_coordinator_coordinator_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *CancelExperimentRequest) GetExperimentId() string {
+	if x != nil {
+		return x.ExperimentId
+	}
+	return ""
+}
+
+func (x *CancelExperimentRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+type CancelExperimentResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CancelExperimentResponse) Reset() {
+	*x = CancelExperimentResponse{}
+	mi := &file_core_proto_coordinator_coordinator_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelExperimentResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelExperimentResponse) ProtoMessage() {}
+
+func (x *CancelExperimentResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_core_proto_coordinator_coordinator_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelExperimentResponse.ProtoReflect.Descriptor instead.
+func (*CancelExperimentResponse) Descriptor() ([]byte, []int) {
+	return file_core_proto_coordinator_coordinator_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *CancelExperimentResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
 var File_core_proto_coordinator_coordinator_proto protoreflect.FileDescriptor
 
 const file_core_proto_coordinator_coordinator_proto_rawDesc = "" +
@@ -155,9 +251,15 @@ const file_core_proto_coordinator_coordinator_proto_rawDesc = "" +
 	"configJson\"W\n" +
 	"\x18CreateExperimentResponse\x12#\n" +
 	"\rexperiment_id\x18\x01 \x01(\tR\fexperimentId\x12\x16\n" +
-	"\x06status\x18\x02 \x01(\tR\x06status2u\n" +
+	"\x06status\x18\x02 \x01(\tR\x06status\"W\n" +
+	"\x17CancelExperimentRequest\x12#\n" +
+	"\rexperiment_id\x18\x01 \x01(\tR\fexperimentId\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\"4\n" +
+	"\x18CancelExperimentResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess2\xd6\x01\n" +
 	"\x12CoordinatorService\x12_\n" +
-	"\x10CreateExperiment\x12$.coordinator.CreateExperimentRequest\x1a%.coordinator.CreateExperimentResponseB=Z;github.com/samirkhairati/backtesting/core/proto/coordinatorb\x06proto3"
+	"\x10CreateExperiment\x12$.coordinator.CreateExperimentRequest\x1a%.coordinator.CreateExperimentResponse\x12_\n" +
+	"\x10CancelExperiment\x12$.coordinator.CancelExperimentRequest\x1a%.coordinator.CancelExperimentResponseB=Z;github.com/samirkhairati/backtesting/core/proto/coordinatorb\x06proto3"
 
 var (
 	file_core_proto_coordinator_coordinator_proto_rawDescOnce sync.Once
@@ -171,16 +273,20 @@ func file_core_proto_coordinator_coordinator_proto_rawDescGZIP() []byte {
 	return file_core_proto_coordinator_coordinator_proto_rawDescData
 }
 
-var file_core_proto_coordinator_coordinator_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_core_proto_coordinator_coordinator_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_core_proto_coordinator_coordinator_proto_goTypes = []any{
 	(*CreateExperimentRequest)(nil),  // 0: coordinator.CreateExperimentRequest
 	(*CreateExperimentResponse)(nil), // 1: coordinator.CreateExperimentResponse
+	(*CancelExperimentRequest)(nil),  // 2: coordinator.CancelExperimentRequest
+	(*CancelExperimentResponse)(nil), // 3: coordinator.CancelExperimentResponse
 }
 var file_core_proto_coordinator_coordinator_proto_depIdxs = []int32{
 	0, // 0: coordinator.CoordinatorService.CreateExperiment:input_type -> coordinator.CreateExperimentRequest
-	1, // 1: coordinator.CoordinatorService.CreateExperiment:output_type -> coordinator.CreateExperimentResponse
-	1, // [1:2] is the sub-list for method output_type
-	0, // [0:1] is the sub-list for method input_type
+	2, // 1: coordinator.CoordinatorService.CancelExperiment:input_type -> coordinator.CancelExperimentRequest
+	1, // 2: coordinator.CoordinatorService.CreateExperiment:output_type -> coordinator.CreateExperimentResponse
+	3, // 3: coordinator.CoordinatorService.CancelExperiment:output_type -> coordinator.CancelExperimentResponse
+	2, // [2:4] is the sub-list for method output_type
+	0, // [0:2] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -197,7 +303,7 @@ func file_core_proto_coordinator_coordinator_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_core_proto_coordinator_coordinator_proto_rawDesc), len(file_core_proto_coordinator_coordinator_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

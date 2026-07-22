@@ -33,12 +33,28 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     const abortControllers: Record<string, AbortController> = {};
 
     data.experiments.forEach((exp: { id: string; status: string }) => {
-      if (exp.status === 'PENDING_INGESTION' || exp.status === 'INGESTED' || exp.status === 'RUNNING') {
+      const isTerminal = ['COMPLETED', 'FAILED', 'CANCELLED'].includes(exp.status);
+      if (!isTerminal) {
         const controller = new AbortController();
         abortControllers[exp.id] = controller;
         
         subscribeToExperimentEvents(exp.id, (eventType, eventData) => {
           console.log(`[SSE Event] ${exp.id} | ${eventType}`, eventData);
+          
+          const majorEvents = [
+            'INGESTION_STARTED', 'INGESTION_COMPLETED', 
+            'BACKTESTING_STARTED', 'BACKTESTING_COMPLETED', 
+            'AGGREGATION_STARTED', 'AGGREGATION_COMPLETED', 
+            'EXPERIMENT_CANCELLED', 'EXPERIMENT_FAILED'
+          ];
+          
+          if (majorEvents.includes(eventType)) {
+            queryClient.invalidateQueries({ queryKey: ['experiments'] });
+            if (exp.id === selectedExperimentId) {
+              queryClient.invalidateQueries({ queryKey: ['experiment', exp.id] });
+            }
+          }
+
           if (eventType === 'INGESTION_STARTED' || eventType === 'INGESTION_JOB_COMPLETED') {
             setProgressMap(prev => ({
               ...prev,
@@ -48,11 +64,6 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                 stage: 'Ingesting'
               }
             }));
-          } else if (eventType === 'INGESTION_COMPLETED') {
-            queryClient.invalidateQueries({ queryKey: ['experiments'] });
-            if (exp.id === selectedExperimentId) {
-              queryClient.invalidateQueries({ queryKey: ['experiment', exp.id] });
-            }
           } else if (eventType === 'BACKTESTING_STARTED' || eventType === 'BACKTESTING_JOB_COMPLETED') {
             setProgressMap(prev => ({
               ...prev,
@@ -62,11 +73,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                 stage: 'Backtesting'
               }
             }));
-          } else if (eventType === 'BACKTESTING_COMPLETED') {
-            queryClient.invalidateQueries({ queryKey: ['experiments'] });
-            if (exp.id === selectedExperimentId) {
-              queryClient.invalidateQueries({ queryKey: ['experiment', exp.id] });
-            }
+          } else if (['BACKTESTING_COMPLETED', 'EXPERIMENT_CANCELLED', 'EXPERIMENT_FAILED', 'AGGREGATION_COMPLETED'].includes(eventType)) {
             setProgressMap(prev => {
               const next = { ...prev };
               delete next[exp.id];

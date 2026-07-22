@@ -66,6 +66,18 @@ export async function createExperiment(payload: Record<string, unknown>) {
   return res.json();
 }
 
+export async function cancelExperiment(id: string) {
+  const res = await fetch(`${API_URL}/experiments/${id}/cancel`, {
+    method: "POST",
+    headers: getHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Failed to cancel experiment");
+  }
+  return res.json();
+}
+
 export async function login(payload: Record<string, unknown>) {
   const res = await fetch(`${API_URL}/auth/login`, {
     method: "POST",

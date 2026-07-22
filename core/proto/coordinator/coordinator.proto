@@ -6,6 +6,7 @@ option go_package = "github.com/samirkhairati/backtesting/core/proto/coordinator
 
 service CoordinatorService {
   rpc CreateExperiment(CreateExperimentRequest) returns (CreateExperimentResponse);
+  rpc CancelExperiment(CancelExperimentRequest) returns (CancelExperimentResponse);
 }
 
 message CreateExperimentRequest {
@@ -19,4 +20,13 @@ message CreateExperimentRequest {
 message CreateExperimentResponse {
   string experiment_id = 1;
   string status = 2;
+}
+
+message CancelExperimentRequest {
+  string experiment_id = 1;
+  string user_id = 2;
+}
+
+message CancelExperimentResponse {
+  bool success = 1;
 }

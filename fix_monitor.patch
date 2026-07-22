@@ -1,0 +1,149 @@
+--- core/coordinator/repository.go
++++ core/coordinator/repository.go
+@@ -191,7 +191,7 @@
+ 	return workerIDs, nil
+ }
+ 
+-func (r *ExperimentRepository) RequeueJobsForWorker(ctx context.Context, workerID string) ([]models.BacktestJobMessage, error) {
++func (r *ExperimentRepository) RequeueJobsForWorker(ctx context.Context, workerID string) ([]models.BacktestJobMessage, []models.BacktestJobMessage, error) {
+ 	// Atomically mark the worker UNHEALTHY and requeue its RUNNING jobs in one step.
+ 	// The worker status and job requeue are done in separate statements intentionally:
+ 	// the UPDATE ... RETURNING on backtest_jobs is atomic itself (locks rows), so
+@@ -200,7 +200,7 @@
+ 	_, err := r.DB.Exec(ctx, "UPDATE workers SET status='UNHEALTHY' WHERE id=$1 AND status='ACTIVE'", workerID)
+ 	if err != nil {
+-		return nil, err
++		return nil, nil, err
+ 	}
+ 
+ 	// Requeue RUNNING jobs with retry headroom; increment retry_count atomically.
+@@ -211,7 +211,7 @@
+ 		RETURNING id, experiment_id, symbol, strategy_name, parameters, start_date, end_date
+ 	`, workerID)
+ 	if err != nil {
+-		return nil, err
++		return nil, nil, err
+ 	}
+ 	defer rows.Close()
+ 
+@@ -226,13 +226,30 @@
+ 	}
+ 
+ 	// Permanently fail jobs that exceeded the retry limit.
+-	_, _ = r.DB.Exec(ctx, "UPDATE backtest_jobs SET status='FAILED' WHERE worker_id=$1 AND status='RUNNING'", workerID)
+-
+-	return requeuedJobs, nil
++	var failedJobs []models.BacktestJobMessage
++	rows2, err := r.DB.Query(ctx, "UPDATE backtest_jobs SET status='FAILED' WHERE worker_id=$1 AND status='RUNNING' RETURNING id, experiment_id, symbol", workerID)
++	if err == nil {
++		defer rows2.Close()
++		for rows2.Next() {
++			var job models.BacktestJobMessage
++			if err := rows2.Scan(&job.JobID, &job.ExperimentID, &job.Symbol); err == nil {
++				failedJobs = append(failedJobs, job)
++			}
++		}
++	}
++
++	return requeuedJobs, failedJobs, nil
+ }
+ 
+ func (r *ExperimentRepository) ClaimIngestionJob(ctx context.Context, jobID string, workerID string) error {
+@@ -244,7 +261,7 @@
+ 	return err
+ }
+ 
+-func (r *ExperimentRepository) RequeueIngestionJobsForWorker(ctx context.Context, workerID string) ([]models.IngestionJobMessage, error) {
++func (r *ExperimentRepository) RequeueIngestionJobsForWorker(ctx context.Context, workerID string) ([]models.IngestionJobMessage, []models.IngestionJobMessage, error) {
+ 	// We don't mark worker UNHEALTHY again here since RequeueJobsForWorker already does it, 
+ 	// or we can just ensure the caller handles worker state correctly.
+ 
+@@ -256,7 +273,7 @@
+ 		RETURNING id, experiment_id, symbol, start_date, end_date
+ 	`, workerID)
+ 	
+ 	if err != nil {
+-		return nil, err
++		return nil, nil, err
+ 	}
+ 	defer rows.Close()
+ 
+@@ -271,9 +288,18 @@
+ 	}
+ 	
+ 	// Fail the remaining jobs that exceeded retry count
+-	_, _ = r.DB.Exec(ctx, "UPDATE ingestion_jobs SET status='FAILED' WHERE worker_id=$1 AND status='RUNNING'", workerID)
+-	
+-	return requeuedJobs, nil
++	var failedJobs []models.IngestionJobMessage
++	rows2, err := r.DB.Query(ctx, "UPDATE ingestion_jobs SET status='FAILED' WHERE worker_id=$1 AND status='RUNNING' RETURNING id, experiment_id, symbol", workerID)
++	if err == nil {
++		defer rows2.Close()
++		for rows2.Next() {
++			var job models.IngestionJobMessage
++			if err := rows2.Scan(&job.JobID, &job.ExperimentID, &job.Symbol); err == nil {
++				failedJobs = append(failedJobs, job)
++			}
++		}
++	}
++	
++	return requeuedJobs, failedJobs, nil
+ }
+ 
+--- core/coordinator/worker_monitor.go
++++ core/coordinator/worker_monitor.go
+@@ -36,7 +36,7 @@
+ }
+ 
+ func (m *WorkerMonitor) checkDeadWorkers(ctx context.Context) {
+-	deadWorkers, err := m.Repo.GetDeadWorkers(ctx, 15)
++	deadWorkers, err := m.Repo.GetDeadWorkers(ctx, 60)
+ 	if err != nil {
+ 		logger.Log.Error("Failed to get dead workers", zap.Error(err))
+ 		return
+ 	}
+@@ -44,7 +44,7 @@
+ 	for _, workerID := range deadWorkers {
+ 		logger.Log.Warn("Worker appears dead, marking unhealthy and requeuing jobs", zap.String("worker_id", workerID))
+-		requeuedJobs, err := m.Repo.RequeueJobsForWorker(ctx, workerID)
++		requeuedJobs, failedJobs, err := m.Repo.RequeueJobsForWorker(ctx, workerID)
+ 		if err != nil {
+ 			logger.Log.Error("Failed to requeue jobs for dead worker", zap.Error(err), zap.String("worker_id", workerID))
+ 			continue
+@@ -56,8 +56,18 @@
+ 			}
+ 		}
++
++		for _, job := range failedJobs {
++			msg := models.BacktestCompletedMessage{
++				JobID:        job.JobID,
++				ExperimentID: job.ExperimentID,
++				Symbol:       job.Symbol,
++				Status:       "FAILED",
++				WorkerID:     workerID,
++			}
++			m.Producer.Publish(ctx, "backtesting-completed-jobs", job.ExperimentID, msg)
++		}
+ 
+ 		// Requeue ingestion jobs for the dead worker
+-		requeuedIngestionJobs, err := m.Repo.RequeueIngestionJobsForWorker(ctx, workerID)
++		requeuedIngestionJobs, failedIngestionJobs, err := m.Repo.RequeueIngestionJobsForWorker(ctx, workerID)
+ 		if err != nil {
+ 			logger.Log.Error("Failed to requeue ingestion jobs for dead worker", zap.Error(err), zap.String("worker_id", workerID))
+ 			continue
+@@ -69,5 +79,15 @@
+ 			}
+ 		}
++
++		for _, job := range failedIngestionJobs {
++			msg := models.IngestionCompletedMessage{
++				JobID:        job.JobID,
++				ExperimentID: job.ExperimentID,
++				Symbol:       job.Symbol,
++				Status:       "FAILED",
++				WorkerID:     workerID,
++			}
++			m.Producer.Publish(ctx, "ingestion-completed-jobs", job.ExperimentID, msg)
++		}
+ 	}
+ }

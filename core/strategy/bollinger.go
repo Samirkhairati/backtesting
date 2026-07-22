@@ -1,8 +1,6 @@
 package strategy
 
 import (
-	"github.com/samirkhairati/backtesting/core/logger"
-
 	"github.com/samirkhairati/backtesting/core/broker"
 	"github.com/samirkhairati/backtesting/core/data"
 )
@@ -51,7 +49,6 @@ func (s *BollingerBandsStrategy) OnBars(b broker.Broker, bars map[string]data.Ba
 				affordable := cash * 0.20 // 20% of cash allocation per signal
 				shares := affordable / bar.Close
 				if shares > 0 {
-					logger.Log.Sugar().Infof("[BollingerBands] %s Oversold below Lower Band. Buying %f shares.", symbol, shares)
 					b.SubmitOrder(symbol, shares)
 				}
 			}
@@ -60,7 +57,6 @@ func (s *BollingerBandsStrategy) OnBars(b broker.Broker, bars map[string]data.Ba
 		// Sell when price reverts to the mean (SMA) or upper band
 		if bar.Close >= smaVal {
 			if isLong {
-				logger.Log.Sugar().Infof("[BollingerBands] %s Reverted to mean. Closing position.", symbol)
 				b.ClosePosition(symbol)
 			}
 		}
