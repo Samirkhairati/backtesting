@@ -25,3 +25,15 @@ roadmaps/
 architecture_guidelines.md
 .venv/
 
+.agents/AGENTS.md
+
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+*.pyd
+*$py.class
+*.so
+.pytest_cache/

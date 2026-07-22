@@ -94,12 +94,13 @@ func (s *ExperimentService) CreateExperiment(ctx context.Context, userID, name, 
 		status = models.ExperimentStatusReady
 		s.Repo.UpdateExperimentStatus(ctx, experimentID, status)
 		
-		err := s.GenerateBacktestJobs(ctx, experimentID)
-		if err != nil {
-			logger.Log.Error("Failed to generate backtest jobs", zap.Error(err))
-		} else {
-			status = models.ExperimentStatusRunning
-		}
+		go func(expID string) {
+			bgCtx := context.Background()
+			err := s.GenerateBacktestJobs(bgCtx, expID)
+			if err != nil {
+				logger.Log.Error("Failed to generate backtest jobs", zap.Error(err))
+			}
+		}(experimentID)
 	}
 
 	logger.Log.Info("Experiment created", zap.String("id", experimentID), zap.String("status", string(status)))
@@ -136,17 +137,19 @@ func (s *ExperimentService) GenerateBacktestJobs(ctx context.Context, experiment
 					}
 					totalJobs++
 
-					publishErr := s.Producer.Publish(ctx, "backtesting-jobs", jobID, models.BacktestJobMessage{
-						JobID:        jobID,
-						ExperimentID: experimentID,
-						Symbol:       sym,
-						StrategyName: strat.Name,
-						Parameters:   params,
-						StartDate:    tf.Start,
-						EndDate:      tf.End,
-					})
-					if publishErr != nil {
-						logger.Log.Error("Failed to publish backtesting job", zap.Error(publishErr))
+					if s.Producer != nil {
+						publishErr := s.Producer.Publish(ctx, "backtesting-jobs", jobID, models.BacktestJobMessage{
+							JobID:        jobID,
+							ExperimentID: experimentID,
+							Symbol:       sym,
+							StrategyName: strat.Name,
+							Parameters:   params,
+							StartDate:    tf.Start,
+							EndDate:      tf.End,
+						})
+						if publishErr != nil {
+							logger.Log.Error("Failed to publish backtesting job", zap.Error(publishErr))
+						}
 					}
 				}
 			}
@@ -155,11 +158,13 @@ func (s *ExperimentService) GenerateBacktestJobs(ctx context.Context, experiment
 
 	if totalJobs > 0 {
 		s.Repo.UpdateExperimentStatus(ctx, experimentID, models.ExperimentStatusRunning)
-		s.Producer.Publish(ctx, "event-stream", experimentID, models.ExperimentEvent{
-			ExperimentID: experimentID,
-			EventType:    models.EventTypeBacktestingStarted,
-			TotalJobs:    totalJobs,
-		})
+		if s.Producer != nil {
+			s.Producer.Publish(ctx, "event-stream", experimentID, models.ExperimentEvent{
+				ExperimentID: experimentID,
+				EventType:    models.EventTypeBacktestingStarted,
+				TotalJobs:    totalJobs,
+			})
+		}
 	} else {
 		s.Repo.UpdateExperimentStatus(ctx, experimentID, models.ExperimentStatusCompleted)
 	}

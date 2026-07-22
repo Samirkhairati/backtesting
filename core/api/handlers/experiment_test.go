@@ -169,7 +169,7 @@ func TestExperimentEndpoints_Integration(t *testing.T) {
 		reqBody := models.CreateExperimentRequest{
 			Name:        "E2E Integration Experiment",
 			Description: "Hits the real coordinator",
-			Symbols:     []string{"TSLA"},
+			Symbols:     []string{"TSLA_TEST_UNIQUE"},
 			Strategies: []models.StrategySweep{
 				{
 					Name: "EMA_Cross",
