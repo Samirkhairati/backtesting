@@ -59,7 +59,6 @@ const formSchema = baseFormSchema.refine(data => {
   return diffDays >= 28;
 }, {
   message: "Timeframe must be at least 1 month long.",
-  message: "Timeframe must be at least 1 month long.",
   path: ["endDate"]
 })
 
