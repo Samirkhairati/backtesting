@@ -173,8 +173,11 @@ services:
     profiles: ["dev"]
     ports:
       - "${CLIENT_HOST_PORT:-5173}:5173"
+    environment:
+      - CI=true
     volumes:
       - ./client:/app
+      - /app/node_modules
     command: sh -c "pnpm install && pnpm run dev --host"
 
   client-test:
