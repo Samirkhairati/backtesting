@@ -35,14 +35,16 @@ export const Route = createFileRoute('/create')({
   component: CreateExperiment,
 })
 
-const formSchema = z.object({
+const baseFormSchema = z.object({
   name: z.string().min(3, 'Name must be at least 3 characters.'),
   description: z.string().optional(),
   symbols: z.array(z.string()).optional().default([]),
   strategies: z.array(z.string()).min(1, 'Please select at least one strategy.'),
   startDate: z.string().min(1, 'Start date is required.'),
   endDate: z.string().min(1, 'End date is required.'),
-}).refine(data => {
+})
+
+const formSchema = baseFormSchema.refine(data => {
   const start = new Date(data.startDate);
   const end = new Date(data.endDate);
   return start < end;
@@ -57,8 +59,11 @@ const formSchema = z.object({
   return diffDays >= 28;
 }, {
   message: "Timeframe must be at least 1 month long.",
+  message: "Timeframe must be at least 1 month long.",
   path: ["endDate"]
 })
+
+type FormValues = z.infer<typeof baseFormSchema>
 
 // Hardcoded supported strategies for the MVP
 const SUPPORTED_STRATEGIES = [
@@ -89,7 +94,7 @@ function CreateExperiment() {
     enabled: debouncedSearch.length > 0 && stockSelectionMode === 'custom',
   })
 
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm<FormValues, any, FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: '',
@@ -109,7 +114,7 @@ function CreateExperiment() {
     },
   })
 
-  const onSubmit = (values: z.infer<typeof formSchema>) => {
+  const onSubmit = (values: FormValues) => {
     let finalSymbols = values.symbols || [];
     if (stockSelectionMode === 'nasdaq100') {
       finalSymbols = NASDAQ100_TICKERS;

@@ -5,7 +5,7 @@ services:
     profiles: ["dev", "prod", "test"]
     env_file: .env
     ports:
-      - "${POSTGRES_HOST_PORT}:5432"
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -33,7 +33,7 @@ services:
     container_name: backtesting_api_dev
     profiles: ["dev"]
     ports:
-      - "${API_HOST_PORT}:8080"
+      - "${API_HOST_PORT:-8080}:8080"
     volumes:
       - .:/app
 
@@ -55,7 +55,7 @@ services:
     container_name: backtesting_api_prod
     profiles: ["prod"]
     ports:
-      - "${API_HOST_PORT}:8080"
+      - "${API_HOST_PORT:-8080}:8080"
     env_file: .env
     depends_on:
       postgres:
@@ -113,7 +113,7 @@ services:
     container_name: backtesting_coordinator_dev
     profiles: ["dev"]
     ports:
-      - "${COORDINATOR_HOST_PORT}:50051"
+      - "${COORDINATOR_HOST_PORT:-50051}:50051"
     volumes:
       - .:/app
 
@@ -172,7 +172,7 @@ services:
     container_name: backtesting_client_dev
     profiles: ["dev"]
     ports:
-      - "${CLIENT_HOST_PORT}:5173"
+      - "${CLIENT_HOST_PORT:-5173}:5173"
     volumes:
       - ./client:/app
     command: sh -c "pnpm install && pnpm run dev --host"
@@ -197,7 +197,7 @@ services:
     container_name: backtesting_client_prod
     profiles: ["prod"]
     ports:
-      - "${CLIENT_PROD_HOST_PORT}:80"
+      - "${CLIENT_PROD_HOST_PORT:-80}:80"
 
   kafka:
     image: docker.redpanda.com/redpandadata/redpanda:latest
