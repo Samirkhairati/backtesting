@@ -1,5 +1,8 @@
 # Backtesting Engine
 
+<img width="1405" height="884" alt="image" src="https://github.com/user-attachments/assets/b06e93d7-1dbe-4930-ac5f-46e2733657e2" />
+<img width="1428" height="1071" alt="image" src="https://github.com/user-attachments/assets/6080325d-85b1-48a2-b2b8-e37bbd5b42b1" />
+
 A scalable, distributed algorithmic trading backtesting platform.
 
 This platform allows users to define custom algorithmic trading strategies, simulate their performance against historical market data, and evaluate their efficacy. It leverages a microservices architecture to ensure high throughput and scalability, especially when backtesting across numerous assets (like the NASDAQ 100 or S&P 500) over long timeframes.
