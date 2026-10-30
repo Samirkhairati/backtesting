@@ -285,7 +285,7 @@ services:
       - start
       - --default-log-level=warn
       - --smp 1
-      - --memory 1G
+      - --memory ${REDPANDA_MEMORY:-1G}
       - --reserve-memory 0M
       - --overprovisioned
       - --node-id 0
