@@ -1,0 +1,11 @@
+# One block per project / subdomain. Each project publishes its web port on
+# 127.0.0.1 only; Caddy is the single public entrance (80/443).
+
+backtesting.samirkhairati.me {
+	encode gzip
+	reverse_proxy 127.0.0.1:8081
+}
+
+# another-project.samirkhairati.me {
+# 	reverse_proxy 127.0.0.1:8082
+# }

@@ -1,0 +1,18 @@
+# Shared HTTPS reverse proxy for ALL projects on this server.
+# Lives in its own folder (e.g. /opt/caddy), separate from any one project.
+# Host networking: it listens on 80/443 and reaches each project's
+# 127.0.0.1:<port>. Certificates are issued and renewed automatically.
+services:
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: caddy
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data        # certificates - keep this volume
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
