@@ -31,8 +31,23 @@ type Experiment struct {
 	Status        ExperimentStatus        `json:"status"`
 	CreatedAt     time.Time               `json:"created_at"`
 	StatusLogs    []ExperimentStatusLog   `json:"status_logs,omitempty"`
+	// Progress is job counts read straight from the database, so clients can render
+	// progress immediately without depending on live events (which have no replay).
+	Progress *ExperimentProgress `json:"progress,omitempty"`
+	// ServerTime lets clients correct for clock skew when showing live stage durations.
+	ServerTime *time.Time `json:"server_time,omitempty"`
 	ResultSummary map[string]interface{}  `json:"result_summary,omitempty"`
 	EquityCurves  map[string]interface{}  `json:"equity_curves,omitempty"`
+}
+
+type JobProgress struct {
+	Total     int `json:"total"`
+	Completed int `json:"completed"`
+}
+
+type ExperimentProgress struct {
+	Ingestion   JobProgress `json:"ingestion"`
+	Backtesting JobProgress `json:"backtesting"`
 }
 
 type ExperimentStatusLog struct {

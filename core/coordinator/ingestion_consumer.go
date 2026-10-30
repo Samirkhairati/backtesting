@@ -2,6 +2,7 @@ package coordinator
 
 import (
 	"context"
+	"time"
 
 	"github.com/samirkhairati/backtesting/core/kafka"
 	"github.com/samirkhairati/backtesting/core/logger"
@@ -77,12 +78,9 @@ func (ic *IngestionConsumer) handle(ctx context.Context, record *kgo.Record) err
 	})
 
 	if pending == 0 {
-		updated, err := ic.Repo.TryTransitionExperimentStatus(ctx, msg.ExperimentID, models.ExperimentStatusPendingIngestion, models.ExperimentStatusIngested)
-		if err != nil {
-			return err
-		}
-		if !updated {
-			return nil // Another worker already completed this transition
+		service := NewExperimentService(ic.Repo, ic.Producer)
+		if !service.Transition(ctx, msg.ExperimentID, models.ExperimentStatusPendingIngestion, models.ExperimentStatusCreatingBacktestJobs) {
+			return nil // already moved on (or cancelled)
 		}
 		ic.Producer.Publish(ctx, "event-stream", msg.ExperimentID, models.ExperimentEvent{
 			ExperimentID:  msg.ExperimentID,
@@ -91,10 +89,16 @@ func (ic *IngestionConsumer) handle(ctx context.Context, record *kgo.Record) err
 			CompletedJobs: completed,
 		})
 
-		service := NewExperimentService(ic.Repo, ic.Producer)
-		if err := service.GenerateBacktestJobs(ctx, msg.ExperimentID); err != nil {
-			logger.Log.Error("Failed to generate backtest jobs", zap.Error(err))
-		}
+		// Creating thousands of jobs can take a while; do it off the consumer loop so
+		// other ingestion messages keep flowing.
+		go func(expID string) {
+			bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+			defer cancel()
+			if err := service.GenerateBacktestJobs(bgCtx, expID); err != nil {
+				logger.Log.Error("Failed to generate backtest jobs", zap.Error(err), zap.String("id", expID))
+				service.Transition(bgCtx, expID, models.ExperimentStatusCreatingBacktestJobs, models.ExperimentStatusFailed)
+			}
+		}(msg.ExperimentID)
 	}
 
 	return nil

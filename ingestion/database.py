@@ -1,12 +1,47 @@
+import logging
+from contextlib import contextmanager
+
 import psycopg2
 from psycopg2.extras import execute_values
-import logging
 
 logger = logging.getLogger(__name__)
 
 class DatabaseHandler:
     def __init__(self, db_url):
         self.db_url = db_url
+
+    @contextmanager
+    def symbol_lock(self, symbol):
+        """Serialise work on one symbol across all ingestion workers.
+
+        Without this, two workers handling the same symbol at the same moment would both
+        see "no coverage" and both download. With it, the second waits, then sees the first
+        one's coverage and skips the download.
+        """
+        conn = psycopg2.connect(self.db_url)
+        conn.autocommit = True
+        cursor = conn.cursor()
+        try:
+            cursor.execute("SELECT pg_advisory_lock(hashtextextended(%s, 0))", (symbol,))
+            yield
+        finally:
+            try:
+                cursor.execute("SELECT pg_advisory_unlock(hashtextextended(%s, 0))", (symbol,))
+            finally:
+                cursor.close()
+                conn.close()
+
+    def get_coverage(self, symbol):
+        """Return (start, end) dates already stored for the symbol, or None."""
+        conn = psycopg2.connect(self.db_url)
+        cursor = conn.cursor()
+        try:
+            cursor.execute("SELECT start_date, end_date FROM market_data_coverage WHERE symbol = %s", (symbol,))
+            row = cursor.fetchone()
+            return (row[0], row[1]) if row else None
+        finally:
+            cursor.close()
+            conn.close()
 
     def insert_data(self, symbol, start_date, end_date, rows):
         if not rows:

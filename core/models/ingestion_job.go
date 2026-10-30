@@ -22,4 +22,6 @@ type ExperimentEvent struct {
 	Timestamp     string `json:"timestamp,omitempty"`
 	TotalJobs     int    `json:"total_jobs,omitempty"`
 	CompletedJobs int    `json:"completed_jobs,omitempty"`
+	// Status carries the new experiment status on STATUS_CHANGED events.
+	Status string `json:"status,omitempty"`
 }

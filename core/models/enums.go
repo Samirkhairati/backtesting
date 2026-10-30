@@ -4,8 +4,11 @@ package models
 type ExperimentStatus string
 
 const (
-	ExperimentStatusPending          ExperimentStatus = "PENDING"
-	ExperimentStatusPendingIngestion ExperimentStatus = "PENDING_INGESTION"
+	ExperimentStatusPending               ExperimentStatus = "PENDING"
+	ExperimentStatusCreatingIngestionJobs ExperimentStatus = "CREATING_INGESTION_JOBS"
+	ExperimentStatusPendingIngestion      ExperimentStatus = "PENDING_INGESTION" // shown as "Ingesting"
+	ExperimentStatusCreatingBacktestJobs  ExperimentStatus = "CREATING_BACKTEST_JOBS"
+	// Legacy values kept so rows written by older versions still parse; no longer produced.
 	ExperimentStatusReady            ExperimentStatus = "READY"
 	ExperimentStatusIngested         ExperimentStatus = "INGESTED"
 	ExperimentStatusRunning          ExperimentStatus = "RUNNING"
@@ -38,4 +41,6 @@ const (
 	EventTypeAggregationProgress     EventType = "AGGREGATION_PROGRESS"
 	EventTypeAggregationCompleted    EventType = "AGGREGATION_COMPLETED"
 	EventTypeExperimentCancelled     EventType = "EXPERIMENT_CANCELLED"
+	// EventTypeStatusChanged is published on every experiment status transition so clients can refresh at once.
+	EventTypeStatusChanged EventType = "STATUS_CHANGED"
 )

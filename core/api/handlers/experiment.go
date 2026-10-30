@@ -118,7 +118,61 @@ func (h *ExperimentHandler) GetExperiments(c *gin.Context) {
 		experiments = []models.Experiment{}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"experiments": experiments})
+	ids := make([]string, 0, len(experiments))
+	for _, e := range experiments {
+		ids = append(ids, e.ID)
+	}
+	progress := h.loadProgress(c.Request.Context(), ids)
+	now := time.Now().UTC()
+	for i := range experiments {
+		experiments[i].Progress = progress[experiments[i].ID]
+		experiments[i].ServerTime = &now
+	}
+
+	c.JSON(http.StatusOK, gin.H{"experiments": experiments, "server_time": now})
+}
+
+
+// loadProgress returns job counts for the given experiments straight from the database.
+// Counting here (instead of relying on live events, which have no replay) means a client
+// can draw correct progress bars on its very first request.
+func (h *ExperimentHandler) loadProgress(ctx context.Context, ids []string) map[string]*models.ExperimentProgress {
+	out := make(map[string]*models.ExperimentProgress, len(ids))
+	for _, id := range ids {
+		out[id] = &models.ExperimentProgress{}
+	}
+	if len(ids) == 0 {
+		return out
+	}
+
+	fill := func(table string, set func(p *models.ExperimentProgress, total, done int)) {
+		rows, err := h.DB.Query(
+			ctx,
+			"SELECT experiment_id::text, COUNT(*), COUNT(*) FILTER (WHERE status IN ('COMPLETED','FAILED')) FROM "+table+" WHERE experiment_id = ANY($1::uuid[]) GROUP BY experiment_id",
+			ids,
+		)
+		if err != nil {
+			logger.Log.Error("Failed to load job progress", zap.Error(err), zap.String("table", table))
+			return
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id string
+			var total, done int
+			if err := rows.Scan(&id, &total, &done); err == nil {
+				if p, ok := out[id]; ok {
+					set(p, total, done)
+				}
+			}
+		}
+	}
+	fill("ingestion_jobs", func(p *models.ExperimentProgress, total, done int) {
+		p.Ingestion = models.JobProgress{Total: total, Completed: done}
+	})
+	fill("backtest_jobs", func(p *models.ExperimentProgress, total, done int) {
+		p.Backtesting = models.JobProgress{Total: total, Completed: done}
+	})
+	return out
 }
 
 // GetExperimentByID returns a specific experiment if it belongs to the authenticated user
@@ -168,6 +222,10 @@ func (h *ExperimentHandler) GetExperimentByID(c *gin.Context) {
 	} else {
 		logger.Log.Error("Failed to query status logs", zap.Error(err))
 	}
+
+	exp.Progress = h.loadProgress(c.Request.Context(), []string{exp.ID})[exp.ID]
+	now := time.Now().UTC()
+	exp.ServerTime = &now
 
 	c.JSON(http.StatusOK, exp)
 }

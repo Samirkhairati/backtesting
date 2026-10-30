@@ -97,7 +97,12 @@ if __name__ == '__main__':
         producer.send('ingestion-job-events', value=started_msg, key=job_id)
         producer.flush()
         
-        status = processor.process_job(symbol, start, end)
+        status, downloaded = processor.process_job(job_id, symbol, start, end)
+
+        if status == "CANCELLED":
+            # The coordinator already marked the job cancelled; nothing to report.
+            consumer.commit()
+            continue
         
         producer.send('ingestion-completed-jobs', value={
             'job_id': job_id,
@@ -107,7 +112,9 @@ if __name__ == '__main__':
         }, key=job_id)
         producer.flush()
 
-        if status == "COMPLETED":
+        # Only invalidate when new bars were actually stored; a skipped duplicate job
+        # must not throw away a perfectly good cache entry.
+        if status == "COMPLETED" and downloaded:
             try:
                 r = redis.Redis.from_url(f"redis://{REDIS_URL}")
                 r.delete(f"bars:{symbol}")

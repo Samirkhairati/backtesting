@@ -70,8 +70,74 @@ func (r *ExperimentRepository) InsertIngestionJob(ctx context.Context, experimen
 	return jobID, err
 }
 
+// UpdateIngestionJobStatus records a finished job. A CANCELLED job is never overwritten, so a
+// worker that was mid-download when the experiment was cancelled cannot resurrect it.
 func (r *ExperimentRepository) UpdateIngestionJobStatus(ctx context.Context, jobID string, status models.IngestionJobStatus) error {
-	_, err := r.DB.Exec(ctx, "UPDATE ingestion_jobs SET status=$1, completed_at=CURRENT_TIMESTAMP WHERE id=$2", string(status), jobID)
+	_, err := r.DB.Exec(ctx, "UPDATE ingestion_jobs SET status=$1, completed_at=CURRENT_TIMESTAMP WHERE id=$2 AND status <> 'CANCELLED'", string(status), jobID)
+	return err
+}
+
+// GetMarketDataCoverageBatch loads coverage for many symbols in one query.
+// The result maps symbol -> [start, end] as YYYY-MM-DD; symbols without coverage are absent.
+func (r *ExperimentRepository) GetMarketDataCoverageBatch(ctx context.Context, symbols []string) (map[string][2]string, error) {
+	rows, err := r.DB.Query(ctx, "SELECT symbol, TO_CHAR(start_date, 'YYYY-MM-DD'), TO_CHAR(end_date, 'YYYY-MM-DD') FROM market_data_coverage WHERE symbol = ANY($1)", symbols)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[string][2]string, len(symbols))
+	for rows.Next() {
+		var sym, start, end string
+		if err := rows.Scan(&sym, &start, &end); err != nil {
+			return nil, err
+		}
+		out[sym] = [2]string{start, end}
+	}
+	return out, rows.Err()
+}
+
+// IngestionJobRef identifies a freshly inserted ingestion job.
+type IngestionJobRef struct {
+	ID     string
+	Symbol string
+}
+
+// InsertIngestionJobs creates one PENDING ingestion job per symbol in a single statement.
+func (r *ExperimentRepository) InsertIngestionJobs(ctx context.Context, experimentID string, symbols []string, startDate, endDate string) ([]IngestionJobRef, error) {
+	rows, err := r.DB.Query(
+		ctx,
+		`INSERT INTO ingestion_jobs (experiment_id, symbol, start_date, end_date, status)
+		 SELECT $1::uuid, s, $3::date, $4::date, 'PENDING' FROM unnest($2::text[]) AS s
+		 RETURNING id, symbol`,
+		experimentID, symbols, startDate, endDate,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var refs []IngestionJobRef
+	for rows.Next() {
+		var ref IngestionJobRef
+		if err := rows.Scan(&ref.ID, &ref.Symbol); err != nil {
+			return nil, err
+		}
+		refs = append(refs, ref)
+	}
+	return refs, rows.Err()
+}
+
+// GetExperimentStatus returns the current status string of an experiment.
+func (r *ExperimentRepository) GetExperimentStatus(ctx context.Context, experimentID string) (string, error) {
+	var status string
+	err := r.DB.QueryRow(ctx, "SELECT status FROM experiments WHERE id=$1", experimentID).Scan(&status)
+	return status, err
+}
+
+// CancelOutstandingJobs cancels every not-yet-finished job of an experiment. It is used to clean up
+// jobs that were created concurrently with a cancel.
+func (r *ExperimentRepository) CancelOutstandingJobs(ctx context.Context, experimentID string) error {
+	_, err := r.DB.Exec(ctx, `WITH ing AS (UPDATE ingestion_jobs SET status='CANCELLED' WHERE experiment_id=$1 AND status IN ('PENDING','RUNNING'))
+		UPDATE backtest_jobs SET status='CANCELLED' WHERE experiment_id=$1 AND status IN ('PENDING','RUNNING')`, experimentID)
 	return err
 }
 
@@ -111,7 +177,7 @@ func (r *ExperimentRepository) InsertBacktestJob(ctx context.Context, experiment
 }
 
 func (r *ExperimentRepository) UpdateBacktestJobStatus(ctx context.Context, jobID, status string, resultMetrics []byte) error {
-	_, err := r.DB.Exec(ctx, "UPDATE backtest_jobs SET status=$1, completed_at=CURRENT_TIMESTAMP, result_metrics=$2 WHERE id=$3", status, resultMetrics, jobID)
+	_, err := r.DB.Exec(ctx, "UPDATE backtest_jobs SET status=$1, completed_at=CURRENT_TIMESTAMP, result_metrics=$2 WHERE id=$3 AND status <> 'CANCELLED'", status, resultMetrics, jobID)
 	return err
 }
 
@@ -303,23 +369,16 @@ func (r *ExperimentRepository) RequeueIngestionJobsForWorker(ctx context.Context
 	return requeuedJobs, failedJobs, nil
 }
 
-func (r *ExperimentRepository) CancelExperimentJobs(ctx context.Context, experimentID string) error {
-	// Cancel all non-terminal ingestion jobs (PENDING and RUNNING).
-	// Cancelling RUNNING jobs prevents workers from publishing completion events
-	// that would incorrectly try to transition a CANCELLED experiment to AGGREGATING.
-	if _, err := r.DB.Exec(ctx, "UPDATE ingestion_jobs SET status = 'CANCELLED' WHERE experiment_id = $1 AND status IN ('PENDING', 'RUNNING')", experimentID); err != nil {
-		return err
+// CancelExperimentJobs cancels an experiment and all its unfinished jobs atomically (one statement,
+// so a dropped connection can never leave it half-cancelled). It reports whether the experiment
+// itself changed state; a finished experiment is left untouched.
+func (r *ExperimentRepository) CancelExperimentJobs(ctx context.Context, experimentID string) (bool, error) {
+	tag, err := r.DB.Exec(ctx, `
+		WITH ing AS (UPDATE ingestion_jobs SET status='CANCELLED' WHERE experiment_id=$1 AND status IN ('PENDING','RUNNING')),
+		     bt  AS (UPDATE backtest_jobs  SET status='CANCELLED' WHERE experiment_id=$1 AND status IN ('PENDING','RUNNING'))
+		UPDATE experiments SET status='CANCELLED' WHERE id=$1 AND status NOT IN ('COMPLETED','FAILED','CANCELLED')`, experimentID)
+	if err != nil {
+		return false, err
 	}
-
-	// Cancel all non-terminal backtest jobs.
-	if _, err := r.DB.Exec(ctx, "UPDATE backtest_jobs SET status = 'CANCELLED' WHERE experiment_id = $1 AND status IN ('PENDING', 'RUNNING')", experimentID); err != nil {
-		return err
-	}
-
-	// Mark the experiment as CANCELLED (guard against overwriting COMPLETED).
-	if _, err := r.DB.Exec(ctx, "UPDATE experiments SET status = 'CANCELLED' WHERE id = $1 AND status != 'COMPLETED'", experimentID); err != nil {
-		return err
-	}
-
-	return nil
+	return tag.RowsAffected() > 0, nil
 }

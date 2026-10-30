@@ -57,9 +57,14 @@ func (r *RedisStore) fetchAndCacheSymbol(ctx context.Context, symbol string) ([]
 		return nil, err
 	}
 
-	// 3. Cache to Redis for 24 hours
+	// 3. Cache to Redis. Never cache an empty result: it would hide data that arrives later.
+	// Historical bars only change when ingestion adds them, and ingestion deletes the key
+	// when it does, so a long TTL is safe.
+	if len(bars) == 0 {
+		return bars, nil
+	}
 	if dataBytes, err := json.Marshal(bars); err == nil {
-		if setErr := r.client.Set(ctx, key, dataBytes, 24*time.Hour).Err(); setErr != nil {
+		if setErr := r.client.Set(ctx, key, dataBytes, 7*24*time.Hour).Err(); setErr != nil {
 			logger.Log.Error("Failed to set cache in Redis", zap.Error(setErr), zap.String("symbol", symbol))
 		}
 	} else {

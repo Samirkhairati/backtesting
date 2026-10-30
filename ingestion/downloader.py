@@ -1,5 +1,6 @@
 import time
 import logging
+from datetime import date, timedelta
 import yfinance as yf
 import pandas as pd
 
@@ -9,7 +10,9 @@ def fetch_data(symbol, start_date, end_date):
     logger.info(f"Downloading {symbol} from {start_date} to {end_date}")
     time.sleep(1) # Rate limit protection
     
-    data = yf.download(symbol, start=start_date, end=end_date, progress=False)
+    # yfinance treats `end` as exclusive; add a day so the requested last day is included.
+    end_inclusive = (date.fromisoformat(str(end_date)) + timedelta(days=1)).isoformat()
+    data = yf.download(symbol, start=str(start_date), end=end_inclusive, progress=False)
     
     if data.empty:
         logger.warning(f"No data found for {symbol}")

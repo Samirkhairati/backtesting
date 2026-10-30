@@ -3,6 +3,7 @@ package coordinator
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"time"
 
 	"github.com/samirkhairati/backtesting/core/kafka"
@@ -23,6 +24,15 @@ func NewExperimentService(repo *ExperimentRepository, producer kafka.Publisher) 
 	}
 }
 
+// maxConcurrentPublishes bounds parallel Kafka produce calls when fanning out jobs.
+const maxConcurrentPublishes = 32
+
+// maxSymbolLength mirrors the VARCHAR(15) symbol columns.
+const maxSymbolLength = 15
+
+// CreateExperiment stores the experiment and returns immediately. Everything slow (coverage check,
+// creating thousands of jobs, publishing them) runs in the background so the caller is never
+// blocked and the experiment's progress is visible from the first moment.
 func (s *ExperimentService) CreateExperiment(ctx context.Context, userID, name, description, configJSON string) (string, string, error) {
 	experimentID, err := s.Repo.InsertExperiment(ctx, userID, name, description, configJSON)
 	if err != nil {
@@ -45,68 +55,184 @@ func (s *ExperimentService) CreateExperiment(ctx context.Context, userID, name, 
 		return experimentID, string(models.ExperimentStatusReady), nil
 	}
 
-	startDateT, _ := time.Parse(time.RFC3339, config.Timeframes[0].Start)
-	endDateT, _ := time.Parse(time.RFC3339, config.Timeframes[0].End)
-	reqStart := startDateT.Format("2006-01-02")
-	reqEnd := endDateT.Format("2006-01-02")
-
-	var missingSymbols []string
-	for _, sym := range config.Symbols {
-		covStart, covEnd, err := s.Repo.GetMarketDataCoverage(ctx, sym)
-		if err != nil || reqStart < covStart || reqEnd > covEnd {
-			missingSymbols = append(missingSymbols, sym)
+	// The data we need spans all requested timeframes.
+	reqStart, reqEnd := "", ""
+	for _, tf := range config.Timeframes {
+		st, err1 := time.Parse(time.RFC3339, tf.Start)
+		en, err2 := time.Parse(time.RFC3339, tf.End)
+		if err1 != nil || err2 != nil {
+			continue
+		}
+		sd, ed := st.Format("2006-01-02"), en.Format("2006-01-02")
+		if reqStart == "" || sd < reqStart {
+			reqStart = sd
+		}
+		if ed > reqEnd {
+			reqEnd = ed
 		}
 	}
-
-	var status models.ExperimentStatus
-	if len(missingSymbols) > 0 {
-		status = models.ExperimentStatusPendingIngestion
-		err := s.Repo.UpdateExperimentStatus(ctx, experimentID, status)
-		if err == nil && s.Producer != nil {
-			for _, sym := range missingSymbols {
-				jobID, err := s.Repo.InsertIngestionJob(ctx, experimentID, sym, reqStart, reqEnd)
-				if err != nil {
-					logger.Log.Error("Failed to insert ingestion job", zap.Error(err))
-					continue
-				}
-
-				publishErr := s.Producer.Publish(ctx, "ingestion-jobs", jobID, models.IngestionJobMessage{
-					JobID:        jobID,
-					ExperimentID: experimentID,
-					Symbol:       sym,
-					StartDate:    reqStart,
-					EndDate:      reqEnd,
-				})
-				if publishErr != nil {
-					logger.Log.Error("Failed to publish ingestion job", zap.Error(publishErr))
-				}
-			}
-			publishErr := s.Producer.Publish(ctx, "event-stream", experimentID, models.ExperimentEvent{
-				ExperimentID: experimentID,
-				EventType:    models.EventTypeIngestionStarted,
-				TotalJobs:    len(missingSymbols),
-			})
-			if publishErr != nil {
-				logger.Log.Error("Failed to publish event stream message", zap.Error(publishErr))
-			}
-		}
-	} else {
-		status = models.ExperimentStatusReady
-		s.Repo.UpdateExperimentStatus(ctx, experimentID, status)
-		
-		go func(expID string) {
-			bgCtx := context.Background()
-			err := s.GenerateBacktestJobs(bgCtx, expID)
-			if err != nil {
-				logger.Log.Error("Failed to generate backtest jobs", zap.Error(err))
-			}
-		}(experimentID)
+	if reqStart == "" || reqEnd == "" {
+		return experimentID, string(models.ExperimentStatusPending), nil
 	}
 
-	logger.Log.Info("Experiment created", zap.String("id", experimentID), zap.String("status", string(status)))
-	return experimentID, string(status), nil
+	go s.prepareExperiment(experimentID, uniqueStrings(config.Symbols), reqStart, reqEnd)
+
+	logger.Log.Info("Experiment created", zap.String("id", experimentID))
+	return experimentID, string(models.ExperimentStatusPending), nil
 }
 
+func uniqueStrings(in []string) []string {
+	seen := make(map[string]struct{}, len(in))
+	out := make([]string, 0, len(in))
+	for _, v := range in {
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+	return out
+}
+
+// publishStatusChanged tells connected clients to refresh immediately.
+func (s *ExperimentService) publishStatusChanged(ctx context.Context, experimentID string, status models.ExperimentStatus) {
+	if s.Producer == nil {
+		return
+	}
+	pubCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := s.Producer.Publish(pubCtx, "event-stream", experimentID, models.ExperimentEvent{
+		ExperimentID: experimentID,
+		EventType:    models.EventTypeStatusChanged,
+		Status:       string(status),
+	}); err != nil {
+		logger.Log.Warn("Failed to publish status change", zap.Error(err), zap.String("id", experimentID))
+	}
+}
+
+// Transition moves an experiment between statuses only if it is still in `from`. Because the
+// update is conditional, a cancelled experiment can never be resurrected by a late worker.
+func (s *ExperimentService) Transition(ctx context.Context, experimentID string, from, to models.ExperimentStatus) bool {
+	ok, err := s.Repo.TryTransitionExperimentStatus(ctx, experimentID, from, to)
+	if err != nil {
+		logger.Log.Error("Failed to transition experiment", zap.Error(err), zap.String("id", experimentID), zap.String("to", string(to)))
+		return false
+	}
+	if ok {
+		s.publishStatusChanged(ctx, experimentID, to)
+	}
+	return ok
+}
+
+// publishAll publishes messages concurrently (bounded) and waits for all of them.
+func (s *ExperimentService) publishAll(ctx context.Context, topic string, msgs []keyedMessage) {
+	if s.Producer == nil {
+		return
+	}
+	sem := make(chan struct{}, maxConcurrentPublishes)
+	var wg sync.WaitGroup
+	for _, m := range msgs {
+		sem <- struct{}{}
+		wg.Add(1)
+		go func(m keyedMessage) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			if err := s.Producer.Publish(ctx, topic, m.key, m.value); err != nil {
+				logger.Log.Error("Failed to publish message", zap.Error(err), zap.String("topic", topic), zap.String("key", m.key))
+			}
+		}(m)
+	}
+	wg.Wait()
+}
+
+type keyedMessage struct {
+	key   string
+	value any
+}
+
+// prepareExperiment decides which symbols still need data, creates ingestion jobs for them, or goes
+// straight to backtesting when everything is already stored.
+func (s *ExperimentService) prepareExperiment(experimentID string, symbols []string, reqStart, reqEnd string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+
+	coverage, err := s.Repo.GetMarketDataCoverageBatch(ctx, symbols)
+	if err != nil {
+		// Safe fallback: treat everything as missing. The ingestion worker re-checks coverage
+		// before downloading, so this costs a no-op job per symbol, not a download.
+		logger.Log.Error("Failed to load market data coverage", zap.Error(err), zap.String("id", experimentID))
+		coverage = map[string][2]string{}
+	}
+
+	var missing []string
+	for _, sym := range symbols {
+		// market data keys are varchar(15); anything longer cannot exist or be ingested.
+		if len(sym) > maxSymbolLength {
+			logger.Log.Warn("Skipping invalid symbol", zap.String("symbol", sym), zap.String("id", experimentID))
+			continue
+		}
+		cov, ok := coverage[sym]
+		if !ok || reqStart < cov[0] || reqEnd > cov[1] {
+			missing = append(missing, sym)
+		}
+	}
+
+	if len(missing) == 0 {
+		if s.Transition(ctx, experimentID, models.ExperimentStatusPending, models.ExperimentStatusCreatingBacktestJobs) {
+			if err := s.GenerateBacktestJobs(ctx, experimentID); err != nil {
+				logger.Log.Error("Failed to generate backtest jobs", zap.Error(err), zap.String("id", experimentID))
+				s.Transition(ctx, experimentID, models.ExperimentStatusCreatingBacktestJobs, models.ExperimentStatusFailed)
+			}
+		}
+		return
+	}
+
+	if !s.Transition(ctx, experimentID, models.ExperimentStatusPending, models.ExperimentStatusCreatingIngestionJobs) {
+		return // cancelled before we started
+	}
+
+	jobs, err := s.Repo.InsertIngestionJobs(ctx, experimentID, missing, reqStart, reqEnd)
+	if err != nil {
+		logger.Log.Error("Failed to insert ingestion jobs", zap.Error(err), zap.String("id", experimentID))
+		s.Transition(ctx, experimentID, models.ExperimentStatusCreatingIngestionJobs, models.ExperimentStatusFailed)
+		return
+	}
+
+	// Switch to "ingesting" BEFORE publishing so a worker finishing instantly cannot race the
+	// status change. If it fails, the experiment was cancelled while we were creating jobs.
+	if !s.Transition(ctx, experimentID, models.ExperimentStatusCreatingIngestionJobs, models.ExperimentStatusPendingIngestion) {
+		if err := s.Repo.CancelOutstandingJobs(ctx, experimentID); err != nil {
+			logger.Log.Error("Failed to clean up jobs of cancelled experiment", zap.Error(err), zap.String("id", experimentID))
+		}
+		return
+	}
+
+	if s.Producer != nil {
+		s.Producer.Publish(ctx, "event-stream", experimentID, models.ExperimentEvent{
+			ExperimentID: experimentID,
+			EventType:    models.EventTypeIngestionStarted,
+			TotalJobs:    len(jobs),
+		})
+	}
+
+	msgs := make([]keyedMessage, 0, len(jobs))
+	for _, j := range jobs {
+		msgs = append(msgs, keyedMessage{key: j.ID, value: models.IngestionJobMessage{
+			JobID:        j.ID,
+			ExperimentID: experimentID,
+			Symbol:       j.Symbol,
+			StartDate:    reqStart,
+			EndDate:      reqEnd,
+		}})
+	}
+	s.publishAll(ctx, "ingestion-jobs", msgs)
+
+	logger.Log.Info("Ingestion jobs created", zap.String("id", experimentID), zap.Int("jobs", len(jobs)), zap.Int("already_covered", len(symbols)-len(missing)))
+}
+
+// GenerateBacktestJobs expects the experiment to be in CREATING_BACKTEST_JOBS. It inserts all jobs,
+// moves the experiment to RUNNING, then publishes them. Every transition is conditional, so a
+// cancel at any point wins and leaves no live jobs behind.
 func (s *ExperimentService) GenerateBacktestJobs(ctx context.Context, experimentID string) error {
 	configJSON, err := s.Repo.GetExperimentConfig(ctx, experimentID)
 	if err != nil {
@@ -118,7 +244,8 @@ func (s *ExperimentService) GenerateBacktestJobs(ctx context.Context, experiment
 		return err
 	}
 
-	totalJobs := 0
+	var msgs []keyedMessage
+	inserted := 0
 
 	for _, sym := range config.Symbols {
 		for _, tf := range config.Timeframes {
@@ -136,23 +263,25 @@ func (s *ExperimentService) GenerateBacktestJobs(ctx context.Context, experiment
 						continue
 					}
 					if jobID == "" {
-						// Job already exists (idempotency conflict) — skip publishing
+						// Job already exists (idempotency conflict) - skip publishing
 						continue
 					}
-					totalJobs++
+					inserted++
+					msgs = append(msgs, keyedMessage{key: jobID, value: models.BacktestJobMessage{
+						JobID:        jobID,
+						ExperimentID: experimentID,
+						Symbol:       sym,
+						StrategyName: strat.Name,
+						Parameters:   params,
+						StartDate:    tf.Start,
+						EndDate:      tf.End,
+					}})
 
-					if s.Producer != nil {
-						publishErr := s.Producer.Publish(ctx, "backtesting-jobs", jobID, models.BacktestJobMessage{
-							JobID:        jobID,
-							ExperimentID: experimentID,
-							Symbol:       sym,
-							StrategyName: strat.Name,
-							Parameters:   params,
-							StartDate:    tf.Start,
-							EndDate:      tf.End,
-						})
-						if publishErr != nil {
-							logger.Log.Error("Failed to publish backtesting job", zap.Error(publishErr))
+					// Notice a cancel quickly instead of inserting thousands of orphan jobs.
+					if inserted%200 == 0 {
+						if st, err := s.Repo.GetExperimentStatus(ctx, experimentID); err == nil && st == string(models.ExperimentStatusCancelled) {
+							s.Repo.CancelOutstandingJobs(ctx, experimentID)
+							return nil
 						}
 					}
 				}
@@ -160,19 +289,25 @@ func (s *ExperimentService) GenerateBacktestJobs(ctx context.Context, experiment
 		}
 	}
 
-	if totalJobs > 0 {
-		s.Repo.UpdateExperimentStatus(ctx, experimentID, models.ExperimentStatusRunning)
-		if s.Producer != nil {
-			s.Producer.Publish(ctx, "event-stream", experimentID, models.ExperimentEvent{
-				ExperimentID: experimentID,
-				EventType:    models.EventTypeBacktestingStarted,
-				TotalJobs:    totalJobs,
-			})
-		}
-	} else {
-		s.Repo.UpdateExperimentStatus(ctx, experimentID, models.ExperimentStatusCompleted)
+	if inserted == 0 {
+		s.Transition(ctx, experimentID, models.ExperimentStatusCreatingBacktestJobs, models.ExperimentStatusCompleted)
+		return nil
 	}
 
+	// Go to RUNNING before publishing so a job finishing instantly cannot race the status change.
+	if !s.Transition(ctx, experimentID, models.ExperimentStatusCreatingBacktestJobs, models.ExperimentStatusRunning) {
+		s.Repo.CancelOutstandingJobs(ctx, experimentID)
+		return nil
+	}
+
+	if s.Producer != nil {
+		s.Producer.Publish(ctx, "event-stream", experimentID, models.ExperimentEvent{
+			ExperimentID: experimentID,
+			EventType:    models.EventTypeBacktestingStarted,
+			TotalJobs:    inserted,
+		})
+	}
+	s.publishAll(ctx, "backtesting-jobs", msgs)
 	return nil
 }
 
@@ -210,19 +345,26 @@ func generateCombinations(params map[string][]interface{}) []map[string]interfac
 
 func (s *ExperimentService) CancelExperiment(ctx context.Context, experimentID string) error {
 	logger.Log.Info("Cancelling experiment", zap.String("id", experimentID))
-	
-	if err := s.Repo.CancelExperimentJobs(ctx, experimentID); err != nil {
+
+	// Use our own deadline: a caller that disconnects must not abort a half-finished cancel.
+	opCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	changed, err := s.Repo.CancelExperimentJobs(opCtx, experimentID)
+	if err != nil {
 		logger.Log.Error("Failed to cancel experiment jobs", zap.Error(err), zap.String("id", experimentID))
 		return err
 	}
 
-	if s.Producer != nil {
-		s.Producer.Publish(ctx, "event-stream", experimentID, models.ExperimentEvent{
+	if changed && s.Producer != nil {
+		pubCtx, pubCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer pubCancel()
+		s.Producer.Publish(pubCtx, "event-stream", experimentID, models.ExperimentEvent{
 			ExperimentID: experimentID,
 			EventType:    models.EventTypeExperimentCancelled,
 		})
+		s.publishStatusChanged(pubCtx, experimentID, models.ExperimentStatusCancelled)
 	}
-	
+
 	return nil
 }
-

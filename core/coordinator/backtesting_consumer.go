@@ -81,12 +81,9 @@ func (bc *BacktestingConsumer) handle(ctx context.Context, record *kgo.Record) e
 	})
 
 	if pending == 0 {
-		updated, err := bc.Repo.TryTransitionExperimentStatus(ctx, msg.ExperimentID, models.ExperimentStatusRunning, models.ExperimentStatusAggregating)
-		if err != nil {
-			return err
-		}
-		if !updated {
-			return nil // Another worker already started aggregation
+		service := NewExperimentService(bc.Repo, bc.Producer)
+		if !service.Transition(ctx, msg.ExperimentID, models.ExperimentStatusRunning, models.ExperimentStatusAggregating) {
+			return nil // Another worker already started aggregation, or the experiment was cancelled
 		}
 		bc.Producer.Publish(ctx, "event-stream", msg.ExperimentID, models.ExperimentEvent{
 			ExperimentID:  msg.ExperimentID,
@@ -116,8 +113,8 @@ func (bc *BacktestingConsumer) handle(ctx context.Context, record *kgo.Record) e
 					}
 				}
 
-				if err := bc.Repo.UpdateExperimentStatus(bgCtx, expID, models.ExperimentStatusCompleted); err != nil {
-					logger.Log.Error("Failed to update experiment status to completed", zap.Error(err))
+				// Conditional: a cancel that arrived during aggregation must stay cancelled.
+				if !service.Transition(bgCtx, expID, models.ExperimentStatusAggregating, models.ExperimentStatusCompleted) {
 					return
 				}
 				

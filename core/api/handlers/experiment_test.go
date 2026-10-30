@@ -198,7 +198,7 @@ func TestExperimentEndpoints_Integration(t *testing.T) {
 
 		experimentID = resp["experiment_id"].(string)
 		assert.NotEmpty(t, experimentID)
-		assert.Equal(t, "PENDING_INGESTION", resp["status"])
+		assert.Equal(t, "PENDING", resp["status"])
 	})
 
 	// NO MANUAL INSERT NEEDED! The real coordinator wrote it to the database!
