@@ -66,6 +66,12 @@ flowchart TD
 
 The project uses Docker Compose with profiles to manage different environments seamlessly.
 
+### First-time setup
+
+```bash
+cp .env.example .env   # then edit; see the comments in the file
+```
+
 ### Development Environment
 
 The `dev` profile runs the application with live-reloading enabled for all services (API, Workers, Coordinator, and Client).
@@ -86,15 +92,75 @@ The `dev` profile runs the application with live-reloading enabled for all servi
 
 ### Production Environment
 
-The `prod` profile builds optimized images and runs the application without development tools (like live-reloading).
+The `prod` profile builds optimized, non-root images and runs the full stack
+(nginx client, API, coordinator, workers, ingestion, Postgres, Redis, Redpanda)
+with restart policies, healthchecks and correct startup ordering
+(Postgres -> migrations -> Kafka topics -> services).
 
-1. **Start all services:**
+1. **Configure** `.env` (see [Deployment checklist](#deployment-checklist)).
+2. **Start all services:**
    ```bash
    docker compose --profile prod up -d --build
    ```
-2. **Access the Application:**
-   - Client UI: `http://localhost` (Port 80)
-   - API Server: `http://localhost:8080`
+3. **Access the Application:**
+   - Client UI: `http://localhost` (port `CLIENT_PROD_HOST_PORT`, default 80)
+   - API: `http://localhost:8080`, also reachable same-origin at `/api/` through the client
+
+The browser only talks to the client's nginx; it proxies `/api/` (including the
+SSE event stream) to the API, so there is no hardcoded API URL and no CORS to
+configure. To host the API on a different origin, build the client with
+`VITE_API_URL` and set `CORS_ALLOWED_ORIGINS` on the API.
+
+> Building all images at once needs a few GB of RAM. On a small machine (or
+> Docker Desktop's default 3 GB VM) build one at a time:
+> `COMPOSE_PARALLEL_LIMIT=1 docker compose --profile prod build`
+
+### Deployment checklist
+
+- `JWT_SECRET`: random, 32+ chars (`openssl rand -hex 32`). The API refuses to start in release mode otherwise.
+- `POSTGRES_PASSWORD` and the matching `DATABASE_URL`: strong password (percent-encode special characters in the URL).
+- Postgres, Redis, Kafka and the coordinator only bind to `127.0.0.1` (`BIND_ADDRESS`). Leave it that way; only the client (80) and API (8080) are meant to be public.
+- Put a TLS-terminating reverse proxy / load balancer (Caddy, Traefik, cloud LB) in front of the client port, or put TLS on nginx.
+- Back up the `postgres_data` volume. `docker compose down -v` deletes it.
+- Single-node Redpanda, Postgres and Redis run in containers here; for HA use managed services and point `DATABASE_URL`, `REDIS_URL` and `KAFKA_BROKERS` at them.
+
+## CI/CD
+
+Two GitHub Actions workflows live in `.github/workflows/`:
+
+| Workflow | Trigger | What it does |
+|---|---|---|
+| `ci.yml` | PRs and pushes to `main` | Backend tests, client lint/typecheck/build, then builds the prod images, boots the full prod stack and smoke-tests it |
+| `deploy.yml` | `ci.yml` succeeds on `main` (or manual run) | Builds and pushes the 5 prod images to GHCR, then deploys over SSH |
+
+### One-time setup
+
+1. **Push to GitHub.** CI works with no configuration (it uses `.env.example`).
+2. **Registry:** nothing to configure; images are pushed to `ghcr.io/<owner>/backtesting-<service>` using the built-in `GITHUB_TOKEN`. In *Settings > Actions > General > Workflow permissions* allow read/write.
+3. **Server** (any Linux host with Docker + Compose plugin):
+   ```bash
+   mkdir -p /opt/backtesting && cd /opt/backtesting
+   # create .env here from .env.example with production values
+   ```
+   Create a dedicated deploy user in the `docker` group and an SSH key pair for it.
+4. **GitHub repo secrets** (*Settings > Secrets and variables > Actions*):
+
+   | Secret | Value |
+   |---|---|
+   | `DEPLOY_HOST` | server hostname/IP (leave unset to only publish images) |
+   | `DEPLOY_USER` | deploy user |
+   | `DEPLOY_PATH` | e.g. `/opt/backtesting` (holds `.env`) |
+   | `DEPLOY_SSH_KEY` | private key |
+   | `DEPLOY_KNOWN_HOSTS` | output of `ssh-keyscan <host>` |
+
+5. **Optional approval gate:** create a GitHub *Environment* named `production` with required reviewers; the deploy job waits for approval.
+6. Protect `main` and require the `CI Pipeline` checks before merging.
+
+On each deploy the server receives `docker-compose.yml` + `core/db/migrations`, pulls the images tagged with the commit SHA, runs migrations, and restarts changed services. Roll back by re-running the workflow on an older commit, or on the server:
+
+```bash
+IMAGE_REGISTRY=ghcr.io/<owner>/ IMAGE_TAG=<old-sha> docker compose --profile prod up -d --no-build
+```
 
 ### Testing
 

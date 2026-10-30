@@ -1,4 +1,6 @@
-const API_URL = "http://localhost:8080/api/v1";
+// Same-origin by default: nginx (prod) and the Vite dev server both proxy /api to the API.
+// Set VITE_API_URL at build time to point at a separately hosted API.
+const API_URL = import.meta.env.VITE_API_URL ?? "/api/v1";
 
 function getHeaders() {
   const token = localStorage.getItem("token");

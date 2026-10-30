@@ -2,6 +2,8 @@ package router
 
 import (
 	"net/http"
+	"os"
+	"strings"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -20,10 +22,19 @@ func SetupRouter(db *pgxpool.Pool, coordinatorClient pb.CoordinatorServiceClient
 	r.Use(gin.Recovery())
 
 	// Configure CORS
+	// The bundled client talks to the API on its own origin via a reverse proxy,
+	// so CORS is only needed when the API is hosted on a different origin.
+	// CORS_ALLOWED_ORIGINS is a comma-separated list; in debug mode (and only
+	// there) an empty value allows every origin for convenience.
 	corsConfig := cors.DefaultConfig()
-	corsConfig.AllowAllOrigins = true
 	corsConfig.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type", "Authorization"}
-	r.Use(cors.New(corsConfig))
+	if origins := splitList(os.Getenv("CORS_ALLOWED_ORIGINS")); len(origins) > 0 {
+		corsConfig.AllowOrigins = origins
+		r.Use(cors.New(corsConfig))
+	} else if gin.Mode() != gin.ReleaseMode {
+		corsConfig.AllowAllOrigins = true
+		r.Use(cors.New(corsConfig))
+	}
 
 	// Health check endpoint
 	r.GET("/health", func(c *gin.Context) {
@@ -70,4 +81,15 @@ func SetupRouter(db *pgxpool.Pool, coordinatorClient pb.CoordinatorServiceClient
 	}
 
 	return r
+}
+
+// splitList parses a comma-separated env value, dropping blanks.
+func splitList(v string) []string {
+	var out []string
+	for _, item := range strings.Split(v, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
 }

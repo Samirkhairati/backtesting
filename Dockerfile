@@ -2,8 +2,10 @@
 FROM golang:1.26-alpine AS base
 WORKDIR /app
 RUN apk add --no-cache git ca-certificates
+# Cache module downloads separately from source changes
+COPY go.mod go.sum ./
+RUN go mod download
 COPY . .
-RUN go mod tidy
 
 # Dev stage for hot reloading
 FROM base AS dev
@@ -14,11 +16,13 @@ CMD sh -c "go mod tidy && air"
 # Builder stage for compiling the production binary
 FROM base AS builder
 ARG SERVICE
-RUN CGO_ENABLED=0 GOOS=linux go build -o main ./cmd/${SERVICE}
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/main ./cmd/${SERVICE}
 
 # Production stage
-FROM alpine:latest AS prod
-RUN apk --no-cache add ca-certificates tzdata
-WORKDIR /root/
-COPY --from=builder /app/main .
+FROM alpine:3.21 AS prod
+RUN apk --no-cache add ca-certificates tzdata \
+    && addgroup -S app && adduser -S -G app app
+WORKDIR /app
+COPY --from=builder /out/main .
+USER app
 CMD ["./main"]

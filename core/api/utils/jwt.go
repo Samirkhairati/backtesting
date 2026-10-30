@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -15,6 +16,10 @@ func init() {
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
 		log.Fatal("JWT_SECRET environment variable is not set")
+	}
+	// Refuse the placeholder / weak secrets outside of debug mode.
+	if os.Getenv("GIN_MODE") == "release" && (len(secret) < 32 || secret == "your_jwt_secret" || strings.Contains(secret, "change-me")) {
+		log.Fatal("JWT_SECRET must be a random value of at least 32 characters when GIN_MODE=release")
 	}
 	jwtSecret = []byte(secret)
 }

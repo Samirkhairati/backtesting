@@ -1,0 +1,22 @@
+# Never bake secrets or local state into images
+.env
+.env.*
+!.env.example
+
+.git
+.github
+.venv
+.agents
+tmp
+bin
+*.out
+.DS_Store
+.vscode
+.idea
+
+# Client and ingestion have their own build contexts / Dockerfiles
+client/node_modules
+client/dist
+**/__pycache__
+*.pyc
+.pytest_cache

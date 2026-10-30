@@ -1,0 +1,108 @@
+name: Deploy
+
+# Runs after CI succeeds on main, or manually. Builds the production images,
+# pushes them to GitHub Container Registry, then (optionally) deploys over SSH.
+on:
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build and push ${{ matrix.name }}
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { name: api,         context: ".",      file: "Dockerfile",              build_args: "SERVICE=api" }
+          - { name: coordinator, context: ".",      file: "Dockerfile",              build_args: "SERVICE=coordinator" }
+          - { name: worker,      context: ".",      file: "Dockerfile",              build_args: "SERVICE=worker" }
+          - { name: ingestion,   context: ".",      file: "ingestion/Dockerfile",    build_args: "" }
+          - { name: client,      context: "client", file: "client/Dockerfile",       build_args: "" }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Compute image name
+        id: img
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "ref=ghcr.io/${owner}/backtesting-${{ matrix.name }}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          target: prod
+          build-args: ${{ matrix.build_args }}
+          push: true
+          tags: |
+            ${{ steps.img.outputs.ref }}:${{ github.event.workflow_run.head_sha || github.sha }}
+            ${{ steps.img.outputs.ref }}:latest
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+  deploy:
+    name: Deploy to server
+    needs: publish
+    runs-on: ubuntu-latest
+    # Create a GitHub "production" environment to add required reviewers
+    environment: production
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+    steps:
+      - uses: actions/checkout@v4
+        if: env.DEPLOY_HOST != ''
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Deploy over SSH
+        if: env.DEPLOY_HOST != ''
+        env:
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE_TAG: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          echo "$DEPLOY_SSH_KEY" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
+          echo "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          SSH="ssh -i ~/.ssh/id_deploy $DEPLOY_USER@$DEPLOY_HOST"
+          REGISTRY="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/"
+
+          # Compose file + SQL migrations are the only repo files the server needs
+          tar czf - docker-compose.yml core/db/migrations | $SSH "mkdir -p '$DEPLOY_PATH' && tar xzf - -C '$DEPLOY_PATH'"
+
+          echo "$GHCR_TOKEN" | $SSH "docker login ghcr.io -u '$GITHUB_ACTOR' --password-stdin"
+          $SSH "cd '$DEPLOY_PATH' && export IMAGE_REGISTRY='$REGISTRY' IMAGE_TAG='$IMAGE_TAG' \
+            && docker compose --profile prod pull --ignore-buildable \
+            && docker compose --profile prod up -d --no-build --remove-orphans \
+            && docker image prune -f"
+
+      - name: Skipped
+        if: env.DEPLOY_HOST == ''
+        run: echo "DEPLOY_HOST secret not set - images were pushed to GHCR but nothing was deployed."

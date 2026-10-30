@@ -3,9 +3,10 @@ services:
     image: postgres:16-alpine
     container_name: backtesting_postgres
     profiles: ["dev", "prod", "test"]
+    restart: unless-stopped
     env_file: .env
     ports:
-      - "${POSTGRES_HOST_PORT:-5432}:5432"
+      - "${BIND_ADDRESS:-127.0.0.1}:${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -15,7 +16,7 @@ services:
       retries: 5
 
   migrations:
-    image: migrate/migrate
+    image: migrate/migrate:v4.18.1
     container_name: backtesting_migrations
     profiles: ["dev", "prod", "test"]
     env_file: .env
@@ -32,6 +33,9 @@ services:
       target: dev
     container_name: backtesting_api_dev
     profiles: ["dev"]
+    networks:
+      default:
+        aliases: [api]
     ports:
       - "${API_HOST_PORT:-8080}:8080"
     volumes:
@@ -52,14 +56,34 @@ services:
       target: prod
       args:
         - SERVICE=api
+    image: ${IMAGE_REGISTRY:-}backtesting-api:${IMAGE_TAG:-latest}
     container_name: backtesting_api_prod
     profiles: ["prod"]
+    restart: unless-stopped
+    networks:
+      default:
+        aliases: [api]
     ports:
       - "${API_HOST_PORT:-8080}:8080"
     env_file: .env
+    environment:
+      GIN_MODE: release
+      ENV: production
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     depends_on:
       postgres:
         condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+      coordinator-prod:
+        condition: service_started
 
   worker-dev:
     build:
@@ -82,10 +106,21 @@ services:
       target: prod
       args:
         - SERVICE=worker
+    image: ${IMAGE_REGISTRY:-}backtesting-worker:${IMAGE_TAG:-latest}
     profiles: ["prod"]
+    restart: unless-stopped
     env_file: .env
+    environment:
+      GIN_MODE: release
+      ENV: production
     depends_on:
       postgres:
+        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+      redis:
         condition: service_healthy
 
   test:
@@ -112,8 +147,11 @@ services:
       target: dev
     container_name: backtesting_coordinator_dev
     profiles: ["dev"]
+    networks:
+      default:
+        aliases: [coordinator]
     ports:
-      - "${COORDINATOR_HOST_PORT:-50051}:50051"
+      - "${BIND_ADDRESS:-127.0.0.1}:${COORDINATOR_HOST_PORT:-50051}:50051"
     volumes:
       - .:/app
 
@@ -132,12 +170,24 @@ services:
       target: prod
       args:
         - SERVICE=coordinator
+    image: ${IMAGE_REGISTRY:-}backtesting-coordinator:${IMAGE_TAG:-latest}
     container_name: backtesting_coordinator_prod
     profiles: ["prod"]
+    restart: unless-stopped
+    networks:
+      default:
+        aliases: [coordinator]
     env_file: .env
+    environment:
+      GIN_MODE: release
+      ENV: production
     depends_on:
       postgres:
         condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
 
   ingestion-dev:
     build:
@@ -159,10 +209,18 @@ services:
       context: .
       dockerfile: ./ingestion/Dockerfile
       target: prod
+    image: ${IMAGE_REGISTRY:-}backtesting-ingestion:${IMAGE_TAG:-latest}
     profiles: ["prod"]
+    restart: unless-stopped
     env_file: .env
     depends_on:
       postgres:
+        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+      redis:
         condition: service_healthy
 
   client-dev:
@@ -175,6 +233,7 @@ services:
       - "${CLIENT_HOST_PORT:-5173}:5173"
     environment:
       - CI=true
+      - API_PROXY_TARGET=http://api:8080
     volumes:
       - ./client:/app
       - /app/node_modules
@@ -197,15 +256,30 @@ services:
     build:
       context: ./client
       target: prod
+    image: ${IMAGE_REGISTRY:-}backtesting-client:${IMAGE_TAG:-latest}
     container_name: backtesting_client_prod
     profiles: ["prod"]
+    restart: unless-stopped
+    environment:
+      # Where nginx forwards /api/ (service alias + internal port)
+      API_UPSTREAM: ${API_UPSTREAM:-api:8080}
     ports:
       - "${CLIENT_PROD_HOST_PORT:-80}:80"
+    depends_on:
+      api-prod:
+        condition: service_healthy
 
   kafka:
     image: docker.redpanda.com/redpandadata/redpanda:v26.2.6
     container_name: backtesting_kafka
     profiles: ["dev", "prod", "test"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
     command:
       - redpanda
       - start
@@ -223,10 +297,10 @@ services:
       - --rpc-addr 0.0.0.0:33145
       - --advertise-rpc-addr kafka:33145
     ports:
-      - "${KAFKA_SCHEMA_PORT:-18081}:18081"
-      - "${KAFKA_PROXY_PORT:-18082}:18082"
-      - "${KAFKA_EXTERNAL_PORT:-19092}:19092"
-      - "${KAFKA_ADMIN_PORT:-19644}:9644"
+      - "${BIND_ADDRESS:-127.0.0.1}:${KAFKA_SCHEMA_PORT:-18081}:18081"
+      - "${BIND_ADDRESS:-127.0.0.1}:${KAFKA_PROXY_PORT:-18082}:18082"
+      - "${BIND_ADDRESS:-127.0.0.1}:${KAFKA_EXTERNAL_PORT:-19092}:19092"
+      - "${BIND_ADDRESS:-127.0.0.1}:${KAFKA_ADMIN_PORT:-19644}:9644"
     volumes:
       - redpanda_data:/var/lib/redpanda/data
 
@@ -234,8 +308,10 @@ services:
     image: docker.redpanda.com/redpandadata/redpanda:v26.2.6
     container_name: backtesting_kafka_init
     profiles: ["dev", "prod", "test"]
+    restart: "no"
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
     entrypoint: [ "/bin/bash", "-c" ]
     command: 
       - |
@@ -257,8 +333,15 @@ services:
     image: redis:7-alpine
     container_name: backtesting_redis
     profiles: ["dev", "prod", "test"]
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
     ports:
-      - "${REDIS_HOST_PORT:-6379}:6379"
+      - "${BIND_ADDRESS:-127.0.0.1}:${REDIS_HOST_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
 

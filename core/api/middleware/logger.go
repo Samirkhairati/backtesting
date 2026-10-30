@@ -8,12 +8,13 @@ import (
 	"go.uber.org/zap"
 )
 
-// RequestLogger is a Gin middleware that logs HTTP requests using Zap
+// RequestLogger is a Gin middleware that logs HTTP requests using Zap.
+// The query string is intentionally not logged: the SSE endpoint carries the
+// auth token there.
 func RequestLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
-		query := c.Request.URL.RawQuery
 
 		// Process request
 		c.Next()
@@ -26,7 +27,6 @@ func RequestLogger() gin.HandlerFunc {
 			zap.Int("status", c.Writer.Status()),
 			zap.String("method", c.Request.Method),
 			zap.String("path", path),
-			zap.String("query", query),
 			zap.String("ip", c.ClientIP()),
 			zap.String("user-agent", c.Request.UserAgent()),
 			zap.String("errors", c.Errors.ByType(gin.ErrorTypePrivate).String()),

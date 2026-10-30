@@ -63,6 +63,8 @@ const formSchema = baseFormSchema.refine(data => {
 })
 
 type FormValues = z.infer<typeof baseFormSchema>
+// `symbols` has a default, so the form's input type differs from the parsed output
+type FormInput = z.input<typeof baseFormSchema>
 
 // Hardcoded supported strategies for the MVP
 const SUPPORTED_STRATEGIES = [
@@ -93,7 +95,7 @@ function CreateExperiment() {
     enabled: debouncedSearch.length > 0 && stockSelectionMode === 'custom',
   })
 
-  const form = useForm<FormValues, any, FormValues>({
+  const form = useForm<FormInput, unknown, FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: '',
@@ -228,7 +230,7 @@ function CreateExperiment() {
                         <FormControl>
                           <MultiSelect
                             options={searchResults?.map((sym: { symbol: string, name: string }) => ({ label: `${sym.symbol} - ${sym.name}`, value: sym.symbol })) || []}
-                            selected={field.value}
+                            selected={field.value ?? []}
                             onChange={field.onChange}
                             onSearch={setSearchTerm}
                             placeholder={isLoadingSymbols ? "Searching..." : "Type to search stocks"}
@@ -249,7 +251,7 @@ function CreateExperiment() {
                       <FormControl>
                         <MultiSelect
                           options={SUPPORTED_STRATEGIES.map(s => ({ label: s.label, value: s.id }))}
-                          selected={field.value}
+                          selected={field.value ?? []}
                           onChange={field.onChange}
                           placeholder="Select algorithms"
                         />

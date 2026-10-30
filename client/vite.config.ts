@@ -16,4 +16,13 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  server: {
+    // The client calls the API on its own origin (/api/v1); forward it in dev.
+    proxy: {
+      "/api": {
+        target: process.env.API_PROXY_TARGET ?? "http://api:8080",
+        changeOrigin: true,
+      },
+    },
+  },
 })

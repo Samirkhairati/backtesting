@@ -10,10 +10,12 @@ FROM base AS dev
 RUN pip install watchdog
 COPY ingestion/ .
 # Run server with hot reload
-# Run server with hot reload
 CMD ["watchmedo", "auto-restart", "--directory=.", "--pattern=*.py", "--recursive", "--", "python", "server.py"]
 
 # Production stage
 FROM base AS prod
 COPY ingestion/ .
+RUN useradd --system --no-create-home app
+USER app
+ENV PYTHONUNBUFFERED=1
 CMD ["python", "server.py"]
