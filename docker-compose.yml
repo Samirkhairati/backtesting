@@ -203,7 +203,7 @@ services:
       - "${CLIENT_PROD_HOST_PORT:-80}:80"
 
   kafka:
-    image: docker.redpanda.com/redpandadata/redpanda:latest
+    image: docker.redpanda.com/redpandadata/redpanda:v26.2.6
     container_name: backtesting_kafka
     profiles: ["dev", "prod", "test"]
     command:
@@ -231,7 +231,7 @@ services:
       - redpanda_data:/var/lib/redpanda/data
 
   kafka-init:
-    image: docker.redpanda.com/redpandadata/redpanda:latest
+    image: docker.redpanda.com/redpandadata/redpanda:v26.2.6
     container_name: backtesting_kafka_init
     profiles: ["dev", "prod", "test"]
     depends_on:
