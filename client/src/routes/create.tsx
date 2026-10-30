@@ -155,14 +155,14 @@ function CreateExperiment() {
 
   return (
     <div className="w-full max-w-2xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex items-center gap-4 mb-8">
+      <div className="flex items-center gap-4 mb-4 sm:mb-8">
         <Link to="/dashboard">
           <Button variant="ghost" size="icon" className="rounded-full hover:bg-primary/10 hover:text-primary">
             <ArrowLeft className="h-5 w-5" />
           </Button>
         </Link>
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-primary flex items-center gap-2">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-primary flex items-center gap-2">
             Create Experiment
           </h1>
           <p className="text-muted-foreground font-mono text-sm">Configure your backtesting parameters.</p>

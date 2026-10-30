@@ -188,41 +188,41 @@ export function ExperimentDetails({ experimentId }: { experimentId: string }) {
       
       <CardContent className="flex-1 min-w-0 space-y-6">
         {exp.status === 'COMPLETED' && resultSummary && (
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
             <Card className="bg-black/20 border-border/50">
               <CardContent className="p-4 flex flex-col justify-center">
                 <div className="text-xs text-muted-foreground font-mono uppercase mb-1">Total Return</div>
-                <div className="text-xl font-bold">{resultSummary.TotalReturn?.toFixed(2)}%</div>
+                <div className="text-lg font-bold sm:text-xl">{resultSummary.TotalReturn?.toFixed(2)}%</div>
               </CardContent>
             </Card>
             <Card className="bg-black/20 border-border/50">
               <CardContent className="p-4 flex flex-col justify-center">
                 <div className="text-xs text-muted-foreground font-mono uppercase mb-1">Ann. Return</div>
-                <div className="text-xl font-bold">{resultSummary.AnnualizedReturn?.toFixed(2)}%</div>
+                <div className="text-lg font-bold sm:text-xl">{resultSummary.AnnualizedReturn?.toFixed(2)}%</div>
               </CardContent>
             </Card>
             <Card className="bg-black/20 border-border/50">
               <CardContent className="p-4 flex flex-col justify-center">
                 <div className="text-xs text-muted-foreground font-mono uppercase mb-1">Max Drawdown</div>
-                <div className="text-xl font-bold text-red-500">{resultSummary.MaxDrawdown?.toFixed(2)}%</div>
+                <div className="text-lg font-bold sm:text-xl text-red-500">{resultSummary.MaxDrawdown?.toFixed(2)}%</div>
               </CardContent>
             </Card>
             <Card className="bg-black/20 border-border/50">
               <CardContent className="p-4 flex flex-col justify-center">
                 <div className="text-xs text-muted-foreground font-mono uppercase mb-1">Win Rate</div>
-                <div className="text-xl font-bold">{resultSummary.WinRate?.toFixed(2)}%</div>
+                <div className="text-lg font-bold sm:text-xl">{resultSummary.WinRate?.toFixed(2)}%</div>
               </CardContent>
             </Card>
             <Card className="bg-black/20 border-border/50">
               <CardContent className="p-4 flex flex-col justify-center">
                 <div className="text-xs text-muted-foreground font-mono uppercase mb-1">Sharpe Ratio</div>
-                <div className="text-xl font-bold">{resultSummary.SharpeRatio?.toFixed(2)}</div>
+                <div className="text-lg font-bold sm:text-xl">{resultSummary.SharpeRatio?.toFixed(2)}</div>
               </CardContent>
             </Card>
             <Card className="bg-black/20 border-border/50">
               <CardContent className="p-4 flex flex-col justify-center">
                 <div className="text-xs text-muted-foreground font-mono uppercase mb-1">Total Trades</div>
-                <div className="text-xl font-bold">{resultSummary.TotalTrades}</div>
+                <div className="text-lg font-bold sm:text-xl">{resultSummary.TotalTrades}</div>
               </CardContent>
             </Card>
           </div>
@@ -230,9 +230,9 @@ export function ExperimentDetails({ experimentId }: { experimentId: string }) {
 
         {exp.status === 'COMPLETED' && Object.keys(equityCurves).length > 0 ? (
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <h3 className="font-mono uppercase tracking-widest text-xs text-muted-foreground">Equity Curve</h3>
-              <div className="w-[300px] max-w-[60%]">
+              <div className="w-full sm:w-[300px] sm:max-w-[60%]">
                 <MultiSelect 
                   options={curveKeys.map(k => ({ label: k, value: k }))} 
                   selected={selectedCurves} 
@@ -241,7 +241,7 @@ export function ExperimentDetails({ experimentId }: { experimentId: string }) {
                 />
               </div>
             </div>
-            <div className="w-full h-64 border border-border/50 rounded bg-black/20 p-4">
+            <div className="w-full h-64 border border-border/50 rounded bg-black/20 p-2 sm:p-4">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#333" />
@@ -280,7 +280,7 @@ export function ExperimentDetails({ experimentId }: { experimentId: string }) {
 
         {exp.status === 'COMPLETED' && resultSummary?.JobMetrics && (
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="font-mono uppercase tracking-widest text-xs text-muted-foreground">Results By Symbol</h3>
               <div className="flex gap-2">
                 <Button 
@@ -304,8 +304,8 @@ export function ExperimentDetails({ experimentId }: { experimentId: string }) {
                 </Button>
               </div>
             </div>
-            <div className="rounded-md border border-border/50 overflow-hidden">
-              <Table className="table-fixed w-full">
+            <div className="rounded-md border border-border/50 overflow-x-auto">
+              <Table className="w-full min-w-[480px]">
                 <TableHeader className="bg-muted/50">
                   <TableRow>
                     <TableHead className="font-mono uppercase text-xs w-[20%]">Symbol</TableHead>

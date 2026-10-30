@@ -81,7 +81,35 @@ export function ExperimentList({
             </Link>
           </div>
         ) : (
-          <div className="rounded-md border border-border/50 overflow-hidden">
+          <>
+          <ul className="space-y-3 md:hidden">
+            {experiments.map((exp) => (
+              <li key={exp.id}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedExperimentId(exp.id)}
+                  className={`w-full space-y-2 rounded-md border border-border/50 p-3 text-left transition-colors ${selectedExperimentId === exp.id ? 'bg-muted/50' : 'hover:bg-primary/5'}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="min-w-0 break-words font-medium">{exp.name}</span>
+                    <span className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(exp.status)}`}>
+                      {statusLabel(exp.status)}
+                    </span>
+                  </div>
+                  {exp.description && (
+                    <div className="truncate font-mono text-xs text-muted-foreground">{exp.description}</div>
+                  )}
+                  <div className="empty:hidden">
+                    <ExperimentProgress exp={exp} />
+                  </div>
+                  <div className="font-mono text-xs text-muted-foreground">
+                    {new Date(exp.created_at).toLocaleString()}
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="hidden rounded-md border border-border/50 overflow-hidden md:block">
             <Table className="table-fixed w-full">
               <TableHeader className="bg-muted/50">
                 <TableRow>
@@ -120,6 +148,7 @@ export function ExperimentList({
               </TableBody>
             </Table>
           </div>
+          </>
         )}
       </CardContent>
     </Card>
