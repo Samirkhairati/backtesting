@@ -115,6 +115,11 @@ configure. To host the API on a different origin, build the client with
 > Docker Desktop's default 3 GB VM) build one at a time:
 > `COMPOSE_PARALLEL_LIMIT=1 docker compose --profile prod build`
 
+**Rate limiting** is enforced by the client's nginx (`client/nginx.conf.template`), per client IP:
+login/register 5 per minute (burst 5), other `/api/` calls 10 per second (burst 30), and at most 30
+open connections (event streams). Over-limit requests get `429` with a JSON body. If you put a TLS
+proxy in front, configure nginx `set_real_ip_from` / `real_ip_header`, otherwise every visitor shares one limit.
+
 ### Deployment checklist
 
 - `JWT_SECRET`: random, 32+ chars (`openssl rand -hex 32`). The API refuses to start in release mode otherwise.
