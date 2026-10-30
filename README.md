@@ -129,6 +129,30 @@ proxy in front, configure nginx `set_real_ip_from` / `real_ip_header`, otherwise
 - Back up the `postgres_data` volume. `docker compose down -v` deletes it.
 - Single-node Redpanda, Postgres and Redis run in containers here; for HA use managed services and point `DATABASE_URL`, `REDIS_URL` and `KAFKA_BROKERS` at them.
 
+### HTTPS and custom domains (Caddy)
+
+One shared Caddy on the server terminates HTTPS (automatic Let's Encrypt certificates) and routes each
+subdomain to a project. It is **not** part of this app's compose file; it lives in `/opt/caddy` on the
+server (templates in `deploy/caddy/`), so many projects can share it.
+
+1. DNS: add an `A` record for the subdomain (or a `*` wildcard) pointing at the server's IP.
+2. Open ports 80 and 443 on the server's firewall / cloud security group.
+3. In this project's server `.env` bind the app to localhost and pick a free port:
+   ```
+   CLIENT_PROD_BIND=127.0.0.1
+   CLIENT_PROD_HOST_PORT=8081
+   API_BIND=127.0.0.1
+   ```
+4. In `/opt/caddy/Caddyfile` add one block per project, then `docker exec caddy caddy reload --config /etc/caddy/Caddyfile`:
+   ```
+   backtesting.example.com {
+       encode gzip
+       reverse_proxy 127.0.0.1:8081
+   }
+   ```
+
+The client's nginx trusts `X-Forwarded-For` from the Docker network only, so rate limits apply per real visitor.
+
 ## CI/CD
 
 Two GitHub Actions workflows live in `.github/workflows/`:
