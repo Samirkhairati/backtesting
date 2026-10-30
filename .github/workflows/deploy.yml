@@ -98,10 +98,23 @@ jobs:
           tar czf - docker-compose.yml core/db/migrations | $SSH "mkdir -p '$DEPLOY_PATH' && tar xzf - -C '$DEPLOY_PATH'"
 
           echo "$GHCR_TOKEN" | $SSH "docker login ghcr.io -u '$GITHUB_ACTOR' --password-stdin"
-          $SSH "cd '$DEPLOY_PATH' && export IMAGE_REGISTRY='$REGISTRY' IMAGE_TAG='$IMAGE_TAG' \
-            && docker compose --profile prod pull --ignore-buildable \
-            && docker compose --profile prod up -d --no-build --remove-orphans \
-            && docker image prune -f"
+          # Only our own images change between deploys. Third-party images (postgres,
+          # redis, redpanda, migrate) are pinned, so `up` pulls them only if missing;
+          # re-pulling them every time made deploys depend on Docker Hub being reachable.
+          $SSH "bash -s" <<EOF
+          set -euo pipefail
+          cd '$DEPLOY_PATH'
+          export IMAGE_REGISTRY='$REGISTRY' IMAGE_TAG='$IMAGE_TAG'
+          for i in 1 2 3; do
+            if docker compose --profile prod pull api-prod coordinator-prod worker-prod ingestion-prod client-prod; then
+              break
+            fi
+            [ "\$i" = 3 ] && { echo "pull failed after 3 attempts"; exit 1; }
+            echo "pull failed (attempt \$i), retrying in 10s..."; sleep 10
+          done
+          docker compose --profile prod up -d --no-build --remove-orphans
+          docker image prune -f
+          EOF
 
       - name: Skipped
         if: env.DEPLOY_HOST == ''
