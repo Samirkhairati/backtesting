@@ -1,5 +1,14 @@
+import { lazy, Suspense } from 'react'
 import { createRootRoute, Outlet } from '@tanstack/react-router'
-import { TanStackRouterDevtools } from '@tanstack/router-devtools'
+
+// Devtools are for development only; the dynamic import is dropped from production builds
+const TanStackRouterDevtools = import.meta.env.DEV
+  ? lazy(() =>
+      import('@tanstack/router-devtools').then((m) => ({
+        default: m.TanStackRouterDevtools,
+      })),
+    )
+  : () => null
 
 export const Route = createRootRoute({
   component: () => (
@@ -12,7 +21,9 @@ export const Route = createRootRoute({
           <Outlet />
         </main>
       </div>
-      <TanStackRouterDevtools />
+      <Suspense fallback={null}>
+        <TanStackRouterDevtools />
+      </Suspense>
     </div>
   ),
 })
