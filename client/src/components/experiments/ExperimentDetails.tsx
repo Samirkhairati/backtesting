@@ -4,14 +4,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { MultiSelect } from "@/components/ui/multi-select"
 import { fetchExperimentById, cancelExperiment } from '@/lib/api'
-import { formatDuration } from '@/lib/formatters'
+import { isTerminalStatus } from '@/lib/stages'
+import { serverNow } from '@/lib/useServerClock'
+import type { Experiment, ExperimentsResponse, JobMetric } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { StopCircle } from 'lucide-react'
+import { StageTimeline } from './StageTimeline'
 
-interface EquityPoint {
-  Timestamp: string;
-  Value: number;
+interface CancelContext {
+  previousDetail: Experiment | undefined
+  previousList: ExperimentsResponse | undefined
 }
 
 export function ExperimentDetails({ experimentId }: { experimentId: string }) {
@@ -20,23 +23,65 @@ export function ExperimentDetails({ experimentId }: { experimentId: string }) {
   const [page, setPage] = useState(0)
   const pageSize = 10
 
-  const { data: exp, isLoading } = useQuery({
+  const { data: exp, isLoading, isError, error, refetch, isFetching } = useQuery<Experiment, Error>({
     queryKey: ['experiment', experimentId],
     queryFn: () => fetchExperimentById(experimentId),
+    // Poll every second while the experiment is still running; SSE only accelerates this.
     refetchInterval: (query) => {
-      // Auto refetch every 2s if it's not in a terminal state
-      const expData = query.state.data as { status: string } | undefined;
-      if (!expData || ['COMPLETED', 'FAILED', 'CANCELLED'].includes(expData.status)) return false;
-      return 2000;
-    }
+      const expData = query.state.data
+      if (expData && isTerminalStatus(expData.status)) return false
+      return 1000
+    },
   });
 
-  const cancelMutation = useMutation({
+  const detailKey = ['experiment', experimentId] as const
+  const listKey = ['experiments'] as const
+
+  const cancelMutation = useMutation<unknown, Error, void, CancelContext>({
     mutationFn: () => cancelExperiment(experimentId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['experiment', experimentId] })
-      queryClient.invalidateQueries({ queryKey: ['experiments'] })
-    }
+    onMutate: async () => {
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: detailKey }),
+        queryClient.cancelQueries({ queryKey: listKey }),
+      ])
+      const previousDetail = queryClient.getQueryData<Experiment>(detailKey)
+      const previousList = queryClient.getQueryData<ExperimentsResponse>(listKey)
+
+      queryClient.setQueryData<Experiment>(detailKey, (old) =>
+        old
+          ? {
+              ...old,
+              status: 'CANCELLED',
+              status_logs: [
+                ...(old.status_logs ?? []),
+                { status: 'CANCELLED', created_at: new Date(serverNow()).toISOString() },
+              ],
+            }
+          : old,
+      )
+      queryClient.setQueryData<ExperimentsResponse>(listKey, (old) =>
+        old
+          ? {
+              ...old,
+              experiments: old.experiments.map((e) =>
+                e.id === experimentId ? { ...e, status: 'CANCELLED' } : e,
+              ),
+            }
+          : old,
+      )
+      return { previousDetail, previousList }
+    },
+    onError: (_err, _vars, context) => {
+      if (!context) return
+      queryClient.setQueryData(detailKey, context.previousDetail)
+      queryClient.setQueryData(listKey, context.previousList)
+    },
+    onSettled: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: detailKey }),
+        queryClient.invalidateQueries({ queryKey: listKey }),
+      ])
+    },
   });
 
   const chartData = useMemo(() => {
@@ -50,8 +95,8 @@ export function ExperimentDetails({ experimentId }: { experimentId: string }) {
       if (curveName === 'Average') {
          // calculate average curve once
          const allPts: Record<string, { sum: number, count: number }> = {};
-         Object.values(equityCurves).forEach((curve: unknown) => {
-           (curve as EquityPoint[]).forEach(pt => {
+         Object.values(equityCurves).forEach((curve) => {
+           curve.forEach(pt => {
               if (!allPts[pt.Timestamp]) allPts[pt.Timestamp] = { sum: 0, count: 0 };
               allPts[pt.Timestamp].sum += pt.Value;
               allPts[pt.Timestamp].count += 1;
@@ -62,7 +107,7 @@ export function ExperimentDetails({ experimentId }: { experimentId: string }) {
            dataByTs[ts]['Average'] = sum / count;
          });
       } else if (equityCurves[curveName]) {
-         (equityCurves[curveName] as EquityPoint[]).forEach((pt: EquityPoint) => {
+         equityCurves[curveName].forEach((pt) => {
            if (!dataByTs[pt.Timestamp]) dataByTs[pt.Timestamp] = { Timestamp: pt.Timestamp };
            dataByTs[pt.Timestamp][curveName] = pt.Value;
          });
@@ -78,6 +123,19 @@ export function ExperimentDetails({ experimentId }: { experimentId: string }) {
     });
   }, [exp, selectedCurves]);
 
+  if (!exp && isError) {
+    return (
+      <Card className="border-primary/20 bg-black/40 backdrop-blur-md h-full flex flex-col items-center justify-center gap-4 min-h-[400px] p-6 text-center">
+        <p className="font-mono text-sm text-red-500">
+          {error?.message || 'Failed to load experiment'}
+        </p>
+        <Button variant="outline" size="sm" className="font-mono" onClick={() => refetch()} disabled={isFetching}>
+          {isFetching ? 'Retrying...' : 'Retry'}
+        </Button>
+      </Card>
+    );
+  }
+
   if (isLoading || !exp) {
     return (
       <Card className="border-primary/20 bg-black/40 backdrop-blur-md h-full flex items-center justify-center min-h-[400px]">
@@ -86,7 +144,6 @@ export function ExperimentDetails({ experimentId }: { experimentId: string }) {
     );
   }
 
-  const logs = exp.status_logs || [];
   const resultSummary = exp.result_summary;
   const equityCurves = exp.equity_curves || {};
   const curveKeys = ['Average', ...Object.keys(equityCurves)];
@@ -95,34 +152,41 @@ export function ExperimentDetails({ experimentId }: { experimentId: string }) {
     '#ec4899', '#06b6d4', '#14b8a6', '#f97316', '#6366f1',
   ];
   
-  const isTerminal = ['COMPLETED', 'FAILED', 'CANCELLED'].includes(exp.status);
+  const isTerminal = isTerminalStatus(exp.status);
 
   return (
     <Card className="border-primary/20 bg-black/40 backdrop-blur-md h-full flex flex-col">
-      <CardHeader className="flex flex-row items-start justify-between">
-        <div>
-          <CardTitle className="font-mono text-lg text-primary">{exp.name}</CardTitle>
+      <CardHeader className="flex flex-row items-start justify-between gap-3">
+        <div className="min-w-0">
+          <CardTitle className="font-mono text-lg text-primary break-words">{exp.name}</CardTitle>
           <CardDescription className="truncate">{exp.description || 'No description provided'}</CardDescription>
         </div>
         {!isTerminal && (
-          <Button 
-            variant="destructive" 
-            size="sm" 
-            className="font-mono text-xs gap-1"
-            onClick={() => {
-              if(confirm('Are you sure you want to cancel this experiment?')) {
-                cancelMutation.mutate()
-              }
-            }}
-            disabled={cancelMutation.isPending}
-          >
-            <StopCircle className="h-4 w-4" />
-            {cancelMutation.isPending ? 'Cancelling...' : 'Cancel'}
-          </Button>
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            <Button 
+              variant="destructive" 
+              size="sm" 
+              className="font-mono text-xs gap-1"
+              onClick={() => {
+                if(confirm('Are you sure you want to cancel this experiment?')) {
+                  cancelMutation.mutate()
+                }
+              }}
+              disabled={cancelMutation.isPending}
+            >
+              <StopCircle className="h-4 w-4" />
+              {cancelMutation.isPending ? 'Cancelling...' : 'Cancel'}
+            </Button>
+            {cancelMutation.isError && (
+              <p className="max-w-[220px] text-right font-mono text-xs text-red-500">
+                {cancelMutation.error.message || 'Failed to cancel experiment'}
+              </p>
+            )}
+          </div>
         )}
       </CardHeader>
       
-      <CardContent className="flex-1 space-y-6">
+      <CardContent className="flex-1 min-w-0 space-y-6">
         {exp.status === 'COMPLETED' && resultSummary && (
           <div className="grid grid-cols-3 gap-4">
             <Card className="bg-black/20 border-border/50">
@@ -168,7 +232,7 @@ export function ExperimentDetails({ experimentId }: { experimentId: string }) {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h3 className="font-mono uppercase tracking-widest text-xs text-muted-foreground">Equity Curve</h3>
-              <div className="w-[300px]">
+              <div className="w-[300px] max-w-[60%]">
                 <MultiSelect 
                   options={curveKeys.map(k => ({ label: k, value: k }))} 
                   selected={selectedCurves} 
@@ -252,7 +316,7 @@ export function ExperimentDetails({ experimentId }: { experimentId: string }) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {([...resultSummary.JobMetrics] as { Symbol: string, Strategy: string, TotalReturn?: number, MaxDrawdown?: number, WinRate?: number }[])
+                  {([...resultSummary.JobMetrics] as JobMetric[])
                     .sort((a, b) => a.Symbol.localeCompare(b.Symbol))
                     .slice(page * pageSize, (page + 1) * pageSize)
                     .map((job, idx) => (
@@ -270,67 +334,7 @@ export function ExperimentDetails({ experimentId }: { experimentId: string }) {
           </div>
         )}
 
-        {/* Status Timeline */}
-        <div className="space-y-2">
-          <h3 className="font-mono uppercase tracking-widest text-xs text-muted-foreground">Status Timeline</h3>
-          <div className="rounded-md border border-border/50 overflow-hidden">
-            <Table className="table-fixed w-full">
-              <TableHeader className="bg-muted/50">
-                <TableRow>
-                  <TableHead className="font-mono uppercase text-xs">Step</TableHead>
-                  <TableHead className="font-mono uppercase text-xs">Time Started</TableHead>
-                  <TableHead className="font-mono uppercase text-xs text-right">Duration</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {logs.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={3} className="text-center font-mono text-xs text-muted-foreground py-4">No logs available</TableCell>
-                  </TableRow>
-                ) : logs.map((log: { status: string; created_at: string }, index: number) => {
-                  const nextLog = logs[index + 1];
-                  const isTerminal = ['COMPLETED', 'FAILED'].includes(log.status);
-                  const isLast = index === logs.length - 1;
-                  
-                  let durationDisplay = '-';
-                  if (!isLast) {
-                    durationDisplay = formatDuration(log.created_at, nextLog.created_at);
-                  } else if (!isTerminal) {
-                    durationDisplay = formatDuration(log.created_at); // from log start to now
-                  }
-
-                  return (
-                    <TableRow key={index} className="hover:bg-primary/5 transition-colors">
-                      <TableCell>
-                        <span className={`inline-flex w-fit items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                          log.status === 'PENDING' ? 'bg-yellow-500/20 text-yellow-500' :
-                          log.status === 'PENDING_INGESTION' ? 'bg-orange-500/20 text-orange-500' :
-                          log.status === 'INGESTED' ? 'bg-purple-500/20 text-purple-500' :
-                          log.status === 'READY' ? 'bg-indigo-500/20 text-indigo-500' :
-                          log.status === 'RUNNING' ? 'bg-blue-500/20 text-blue-500' :
-                          log.status === 'AGGREGATING' ? 'bg-cyan-500/20 text-cyan-500' :
-                          log.status === 'COMPLETED' ? 'bg-green-500/20 text-green-500' :
-                          'bg-red-500/20 text-red-500'
-                        }`}>
-                          {log.status.replace('_', ' ')}
-                        </span>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground">
-                        {(() => {
-                          const d = new Date(log.created_at);
-                          return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}:${d.getMilliseconds().toString().padStart(3, '0')}`;
-                        })()}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground text-right tabular-nums">
-                        {durationDisplay}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        </div>
+        <StageTimeline experiment={exp} />
       </CardContent>
     </Card>
   );

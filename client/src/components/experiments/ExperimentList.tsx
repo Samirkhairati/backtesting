@@ -3,13 +3,42 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { SmoothProgress } from './SmoothProgress'
+import { getStageProgress, isTerminalStatus, statusBadgeClass, statusLabel, stageIndexOf } from '@/lib/stages'
+import type { Experiment } from '@/lib/types'
 
-interface Experiment {
-  id: string;
-  name: string;
-  description: string;
-  status: string;
-  created_at: string;
+const SPINNER_STAGES = new Set([0, 1, 3]) // Pending, Creating ingestion jobs, Creating backtesting jobs
+
+function ExperimentProgress({ exp }: { exp: Experiment }) {
+  if (isTerminalStatus(exp.status)) return null
+  const stage = stageIndexOf(exp.status)
+  if (stage < 0) return null
+
+  if (SPINNER_STAGES.has(stage)) {
+    return (
+      <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground">
+        <span className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <span>Working...</span>
+      </div>
+    )
+  }
+
+  if (stage === 2 || stage === 4) {
+    const kind = stage === 2 ? 'ingestion' : 'backtesting'
+    const { total, completed } = getStageProgress(exp.progress, kind)
+    return (
+      <SmoothProgress
+        stage={stage === 2 ? 'Ingesting' : 'Backtesting'}
+        percentage={total > 0 ? Math.round((completed / total) * 100) : 0}
+        indeterminate={total === 0}
+        detail={total > 0 ? `${completed}/${total} · ${Math.round((completed / total) * 100)}%` : undefined}
+      />
+    )
+  }
+
+  if (stage === 5) {
+    return <SmoothProgress stage="Aggregating" percentage={0} indeterminate />
+  }
+  return null
 }
 
 interface ExperimentListProps {
@@ -18,7 +47,6 @@ interface ExperimentListProps {
   experiments: Experiment[] | undefined;
   selectedExperimentId: string | null;
   setSelectedExperimentId: (id: string) => void;
-  progressMap: Record<string, { totalJobs: number; completedJobs: number; stage: string }>;
 }
 
 export function ExperimentList({
@@ -27,7 +55,6 @@ export function ExperimentList({
   experiments,
   selectedExperimentId,
   setSelectedExperimentId,
-  progressMap
 }: ExperimentListProps) {
   return (
     <Card className="border-primary/20 bg-black/40 backdrop-blur-md h-fit">
@@ -76,26 +103,12 @@ export function ExperimentList({
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col items-start gap-2">
-                        <span className={`inline-flex w-fit items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                          exp.status === 'PENDING' ? 'bg-yellow-500/20 text-yellow-500' :
-                          exp.status === 'PENDING_INGESTION' ? 'bg-orange-500/20 text-orange-500' :
-                          exp.status === 'INGESTED' ? 'bg-purple-500/20 text-purple-500' :
-                          exp.status === 'READY' ? 'bg-indigo-500/20 text-indigo-500' :
-                          exp.status === 'RUNNING' ? 'bg-blue-500/20 text-blue-500' :
-                          exp.status === 'AGGREGATING' ? 'bg-cyan-500/20 text-cyan-500' :
-                          exp.status === 'COMPLETED' ? 'bg-green-500/20 text-green-500' :
-                          'bg-red-500/20 text-red-500'
-                        }`}>
-                          {exp.status.replace('_', ' ')}
+                        <span className={`inline-flex w-fit items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(exp.status)}`}>
+                          {statusLabel(exp.status)}
                         </span>
-                        {progressMap[exp.id] && (
-                          <div className="w-full mt-1">
-                            <SmoothProgress 
-                              stage={progressMap[exp.id].stage} 
-                              percentage={Math.round((progressMap[exp.id].completedJobs / Math.max(1, progressMap[exp.id].totalJobs)) * 100)} 
-                            />
-                          </div>
-                        )}
+                        <div className="w-full mt-1 empty:hidden">
+                          <ExperimentProgress exp={exp} />
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell className="font-mono text-xs text-muted-foreground text-right leading-tight">

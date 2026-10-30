@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, Link, redirect, useNavigate } from '@tanstack/react-router'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
@@ -30,8 +30,14 @@ import { Label } from '@/components/ui/label'
 import { createExperiment, searchSymbols } from '@/lib/api'
 import { NASDAQ100_TICKERS, SP500_TICKERS } from '@/lib/stockLists'
 import React from 'react'
+import { useAuth } from '@/lib/auth'
 
 export const Route = createFileRoute('/create')({
+  beforeLoad: () => {
+    if (!useAuth.getState().token) {
+      throw redirect({ to: '/' })
+    }
+  },
   component: CreateExperiment,
 })
 
@@ -150,7 +156,7 @@ function CreateExperiment() {
   return (
     <div className="w-full max-w-2xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="flex items-center gap-4 mb-8">
-        <Link to="/">
+        <Link to="/dashboard">
           <Button variant="ghost" size="icon" className="rounded-full hover:bg-primary/10 hover:text-primary">
             <ArrowLeft className="h-5 w-5" />
           </Button>

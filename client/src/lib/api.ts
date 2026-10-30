@@ -1,3 +1,6 @@
+import type { Experiment, ExperimentEvent, ExperimentsResponse, SymbolInfo } from "./types";
+import { recordServerTime } from "./useServerClock";
+
 // Same-origin by default: nginx (prod) and the Vite dev server both proxy /api to the API.
 // Set VITE_API_URL at build time to point at a separately hosted API.
 const API_URL = import.meta.env.VITE_API_URL ?? "/api/v1";
@@ -10,7 +13,7 @@ function getHeaders() {
   };
 }
 
-export async function fetchExperiments() {
+export async function fetchExperiments(): Promise<ExperimentsResponse> {
   const res = await fetch(`${API_URL}/experiments`, {
     headers: getHeaders(),
   });
@@ -18,10 +21,12 @@ export async function fetchExperiments() {
     if (res.status === 401) throw new Error("Unauthorized");
     throw new Error("Failed to fetch experiments");
   }
-  return res.json();
+  const data = (await res.json()) as ExperimentsResponse;
+  recordServerTime(data.server_time);
+  return { ...data, experiments: data.experiments ?? [] };
 }
 
-export async function fetchExperimentById(id: string) {
+export async function fetchExperimentById(id: string): Promise<Experiment> {
   const res = await fetch(`${API_URL}/experiments/${id}`, {
     headers: getHeaders(),
   });
@@ -29,10 +34,12 @@ export async function fetchExperimentById(id: string) {
     if (res.status === 401) throw new Error("Unauthorized");
     throw new Error("Failed to fetch experiment");
   }
-  return res.json();
+  const data = (await res.json()) as Experiment;
+  recordServerTime(data.server_time);
+  return data;
 }
 
-export async function fetchSymbols() {
+export async function fetchSymbols(): Promise<SymbolInfo[]> {
   const res = await fetch(`${API_URL}/data/symbols`, {
     headers: getHeaders(),
   });
@@ -43,7 +50,7 @@ export async function fetchSymbols() {
   return data.symbols;
 }
 
-export async function searchSymbols(query: string) {
+export async function searchSymbols(query: string): Promise<SymbolInfo[]> {
   if (!query) return [];
   const res = await fetch(`${API_URL}/data/symbols/search?q=${encodeURIComponent(query)}`, {
     headers: getHeaders(),
@@ -55,7 +62,7 @@ export async function searchSymbols(query: string) {
   return data.symbols;
 }
 
-export async function createExperiment(payload: Record<string, unknown>) {
+export async function createExperiment(payload: Record<string, unknown>): Promise<unknown> {
   const res = await fetch(`${API_URL}/experiments`, {
     method: "POST",
     headers: getHeaders(),
@@ -68,7 +75,7 @@ export async function createExperiment(payload: Record<string, unknown>) {
   return res.json();
 }
 
-export async function cancelExperiment(id: string) {
+export async function cancelExperiment(id: string): Promise<unknown> {
   const res = await fetch(`${API_URL}/experiments/${id}/cancel`, {
     method: "POST",
     headers: getHeaders(),
@@ -80,7 +87,7 @@ export async function cancelExperiment(id: string) {
   return res.json();
 }
 
-export async function login(payload: Record<string, unknown>) {
+export async function login(payload: Record<string, unknown>): Promise<{ token?: string }> {
   const res = await fetch(`${API_URL}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -93,7 +100,7 @@ export async function login(payload: Record<string, unknown>) {
   return res.json();
 }
 
-export async function register(payload: Record<string, unknown>) {
+export async function register(payload: Record<string, unknown>): Promise<{ token?: string }> {
   const res = await fetch(`${API_URL}/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -108,35 +115,31 @@ export async function register(payload: Record<string, unknown>) {
 
 export function subscribeToExperimentEvents(
   experimentId: string,
-  onEvent: (eventType: string, data: { total_jobs?: number; completed_jobs?: number }) => void,
+  onEvent: (eventType: string, data: ExperimentEvent) => void,
   signal?: AbortSignal
 ) {
   const token = localStorage.getItem("token");
-  // Some browsers don't support headers in EventSource, so we might need to pass token in URL
-  const url = `${API_URL}/experiments/${experimentId}/events${token ? `?token=${token}` : ""}`;
-  
+  // EventSource cannot send headers, so the token goes in the query string.
+  const url = `${API_URL}/experiments/${experimentId}/events${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+
   const eventSource = new EventSource(url);
 
   eventSource.onmessage = (event) => {
     try {
-      const parsed = JSON.parse(event.data);
-      console.log("ALL EVENTS:", parsed);
+      const parsed = JSON.parse(event.data) as ExperimentEvent;
       onEvent(parsed.event_type, parsed);
     } catch (err) {
       console.error("Failed to parse SSE message", err);
     }
   };
 
-  eventSource.onerror = (err) => {
-    console.error("SSE error", err);
-    eventSource.close();
-  };
+  // Do not close on error: EventSource reconnects on its own. Polling is the source of truth anyway.
 
+  const close = () => eventSource.close();
   if (signal) {
-    signal.addEventListener("abort", () => {
-      eventSource.close();
-    });
+    if (signal.aborted) close();
+    else signal.addEventListener("abort", close, { once: true });
   }
 
-  return () => eventSource.close();
+  return close;
 }
