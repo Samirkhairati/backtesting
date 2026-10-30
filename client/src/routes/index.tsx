@@ -6,6 +6,8 @@ import { AuthCard, type AuthMode } from '@/components/AuthCard'
 import { EquityCurve } from '@/components/EquityCurve'
 import { GithubIcon, GITHUB_URL } from '@/components/GithubIcon'
 import { useAuth } from '@/lib/auth'
+import { SampleDashboard } from '@/components/SampleDashboard'
+import { ArchitectureDiagram } from '@/components/ArchitectureDiagram'
 
 export const Route = createFileRoute('/')({
   validateSearch: (search: Record<string, unknown>): { mode?: AuthMode } => ({
@@ -94,6 +96,33 @@ function Index() {
           )}
         </section>
       </div>
+
+      <section aria-labelledby="sample-heading" className="space-y-4 border-t border-primary/10 py-10">
+        <div className="space-y-1">
+          <p className="font-mono text-xs uppercase tracking-[0.3em] text-primary">Results</p>
+          <h2 id="sample-heading" className="text-2xl font-bold tracking-tight sm:text-3xl">
+            Everything in one dashboard
+          </h2>
+          <p className="max-w-2xl font-mono text-sm text-muted-foreground">
+            Track every run live, then compare strategies side by side with equity curves, key metrics and
+            per-symbol results. Sample data shown.
+          </p>
+        </div>
+        <SampleDashboard />
+      </section>
+
+      <section aria-labelledby="arch-heading" className="space-y-4 border-t border-primary/10 py-10">
+        <div className="space-y-1">
+          <p className="font-mono text-xs uppercase tracking-[0.3em] text-primary">Architecture</p>
+          <h2 id="arch-heading" className="text-2xl font-bold tracking-tight sm:text-3xl">
+            How it works
+          </h2>
+          <p className="max-w-2xl font-mono text-sm text-muted-foreground">
+            Event-driven microservices: stateless workers pull jobs from Redpanda, so throughput scales by adding workers.
+          </p>
+        </div>
+        <ArchitectureDiagram />
+      </section>
 
       <footer className="flex items-center justify-center gap-2 border-t border-primary/10 py-6 font-mono text-xs text-muted-foreground">
         <span>Built by Samir Khairati</span>

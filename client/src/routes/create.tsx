@@ -117,7 +117,7 @@ function CreateExperiment() {
     mutationFn: createExperiment,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['experiments'] })
-      navigate({ to: '/' })
+      navigate({ to: '/dashboard' })
     },
   })
 

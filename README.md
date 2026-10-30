@@ -1,149 +1,114 @@
 # Backtesting Engine
 
-<img width="1405" height="884" alt="image" src="https://github.com/user-attachments/assets/b06e93d7-1dbe-4930-ac5f-46e2733657e2" />
-<img width="1428" height="1071" alt="image" src="https://github.com/user-attachments/assets/6080325d-85b1-48a2-b2b8-e37bbd5b42b1" />
+A distributed algorithmic-trading backtesting platform. Pick a universe of symbols (NASDAQ 100, S&P 500 or a custom list), a date range and one or more strategies; the system ingests the historical data, runs every symbol/strategy pair in parallel and aggregates the results into a live dashboard with equity curves, metrics and per-stage timings.
 
-A scalable, distributed algorithmic trading backtesting platform.
+<img width="1405" height="884" alt="Dashboard" src="https://github.com/user-attachments/assets/b06e93d7-1dbe-4930-ac5f-46e2733657e2" />
+<img width="1428" height="1071" alt="Experiment results" src="https://github.com/user-attachments/assets/6080325d-85b1-48a2-b2b8-e37bbd5b42b1" />
 
-This platform allows users to define custom algorithmic trading strategies, simulate their performance against historical market data, and evaluate their efficacy. It leverages a microservices architecture to ensure high throughput and scalability, especially when backtesting across numerous assets (like the NASDAQ 100 or S&P 500) over long timeframes.
+## Features
 
-## Tech Stack
+- **Strategies:** Buy and Hold, SMA Cross, MACD, RSI Mean Reversion, Bollinger Bands.
+- **Parallel by design:** each symbol/strategy pair is an independent job, so adding workers adds throughput.
+- **Live progress:** staged experiment lifecycle (ingestion, backtesting, aggregation) streamed to the browser over Server-Sent Events, with per-stage durations.
+- **Results:** total/annualized return, Sharpe, max drawdown, win rate, trade count, per-symbol table and multi-strategy equity curves.
+- **Resilient:** worker heartbeats, atomic cancellation, ingestion de-duplication and market-data caching.
+- **Built-in auth** (JWT), rate limiting at the edge, mobile-responsive UI.
 
-**Backend & Frameworks**
-- **Go**: Core backend services (API, Coordinator, Workers)
-- **Gin**: HTTP web framework for the API
-- **gRPC**: Inter-service communication
-- **Redpanda (Kafka)**: Distributed event streaming and job queue
-- **PostgreSQL (pgx)**: Primary relational database driver
-- **Redis**: High-performance caching layer
-- **Docker & Docker Compose**: Containerization and orchestration
-
-**Frontend & Frameworks**
-- **React 19**: UI library
-- **Vite**: Build tool and development server
-- **TypeScript**: Static typing
-- **Tailwind CSS & shadcn/ui**: Styling and UI components
-- **Zustand**: State management
-- **TanStack Query (React Query)**: Data fetching and caching
-- **TanStack Router**: Routing
-- **React Hook Form & Zod**: Form handling and schema validation
-- **Recharts**: Data visualization
-
-## Architecture & How It Works
-
-The backtesting engine is composed of several specialized services communicating through a Kafka-compatible message broker (Redpanda) and backed by PostgreSQL and Redis.
+## Architecture
 
 ```mermaid
 flowchart TD
-    Client[Client UI] <-->|REST| API[API Server]
-    
-    API <--> DB[(PostgreSQL)]
-    API <--> Cache[(Redis)]
-    
-    API -- "Publishes Jobs" --> Kafka[Redpanda / Kafka]
-    Coordinator[Coordinator] <-->|Coordinates Jobs| Kafka
-    Coordinator <--> DB
-    
-    Kafka -- "Ingestion Jobs" --> IngestionWorker[Ingestion Worker]
-    IngestionWorker -- "Saves Market Data" --> DB
-    
-    Kafka -- "Backtesting Jobs" --> BacktestingWorker[Backtesting Worker]
-    BacktestingWorker -- "Reads Data & Saves Results" --> DB
+    Client[Client · React] <-->|REST + SSE| API[API · Go/Gin]
+    API --> Kafka[(Redpanda / Kafka)]
+    Kafka <--> Coord[Coordinator · Go]
+    Kafka --> Ing[Ingestion workers · Python]
+    Kafka --> BT[Backtesting workers · Go]
+    API & Coord & Ing & BT --> DB[(PostgreSQL)]
+    Ing & BT --> Cache[(Redis)]
 ```
 
-### Core Components
+| Component | Role |
+|---|---|
+| **Client** | React UI to create experiments, watch live progress and inspect results. Talks only to the API. |
+| **API** | JWT auth, experiment CRUD, publishes jobs, serves status, results and the SSE event stream. |
+| **Coordinator** | Owns the experiment lifecycle: fans an experiment out into jobs, advances stages, monitors worker heartbeats, handles cancellation, aggregates metrics and curves. |
+| **Ingestion workers** | Download and normalize historical market data into PostgreSQL (cached via Redis). |
+| **Backtesting workers** | Run a strategy over one symbol through a simulated broker/portfolio and report metrics and the equity curve. |
+| **Redpanda** | Kafka-compatible event bus and job queue between services. |
+| **PostgreSQL / Redis** | Source of truth (users, experiments, jobs, market data, results) / market-data cache. |
 
-- **Client**: The frontend interface for creating and monitoring experiments.
-- **API**: The main entry point for the frontend, handling user requests and experiment creation.
-- **Coordinator**: Manages the lifecycle of jobs, orchestrating distributed tasks across workers.
-- **Ingestion Worker**: Responsible for fetching historical market data from external providers and storing it in the database.
-- **Backtesting Worker**: Executes the actual trading algorithms against the ingested historical data.
-- **Redpanda (Kafka)**: The message broker facilitating asynchronous communication between services.
-- **PostgreSQL**: The primary relational database for storing experiments, market data, and results.
-- **Redis**: Caching layer for high-performance data retrieval.
+**Experiment lifecycle:** `PENDING` → `CREATING_INGESTION_JOBS` → `PENDING_INGESTION` → `CREATING_BACKTEST_JOBS` → `RUNNING` → `AGGREGATING` → `COMPLETED` (or `FAILED` / `CANCELLED`).
 
-## Running the Application
+The homepage also shows an interactive version of this diagram and a sample results dashboard.
 
-The project uses Docker Compose with profiles to manage different environments seamlessly.
+## Tech stack
 
-### First-time setup
+- **Backend:** Go (Gin, gRPC, pgx), Python (ingestion), Redpanda, PostgreSQL, Redis
+- **Frontend:** React 19, Vite, TypeScript, Tailwind CSS + shadcn/ui, TanStack Query/Router, Zustand, React Hook Form + Zod, Recharts
+- **Infra:** Docker Compose (`dev`, `prod`, `test` profiles), GitHub Actions, GHCR, Caddy
+
+## Repository layout
+
+```
+cmd/            service entrypoints (api, coordinator, worker, migrate)
+core/           Go packages: api, coordinator, worker, strategy, broker, portfolio, simulator, data, kafka, db
+ingestion/      Python ingestion worker
+client/         React frontend (nginx in prod)
+deploy/caddy/   HTTPS reverse-proxy templates
+```
+
+## Quick start
 
 ```bash
-cp .env.example .env   # then edit; see the comments in the file
+cp .env.example .env        # edit values; comments in the file explain each one
+docker compose --profile dev up --build
 ```
 
-### Development Environment
+- UI: <http://localhost:5173> · API: <http://localhost:8080>
+- All services live-reload in `dev`.
+- Scale workers: `docker compose --profile dev up -d --scale worker-dev=5 --scale ingestion-dev=3`
 
-The `dev` profile runs the application with live-reloading enabled for all services (API, Workers, Coordinator, and Client).
+### Tests
 
-1. **Start all services:**
-   ```bash
-   docker compose --profile dev up --build
-   ```
-2. **Access the Application:**
-   - Client UI: `http://localhost:5173`
-   - API Server: `http://localhost:8080`
+```bash
+docker compose --profile test run --rm test          # Go backend tests (with DB + migrations)
+docker compose --profile test run --rm client-test   # client lint + typecheck + build
+```
 
-3. **Scaling Workers (Optional):**
-   You can scale the ingestion and backtesting workers to speed up processing:
-   ```bash
-   docker compose --profile dev up -d --scale worker-dev=5 --scale ingestion-dev=3
-   ```
+### Database
 
-### Production Environment
+```bash
+migrate create -ext sql -dir core/db/migrations -seq name   # new migration
+docker compose down -v                                       # wipe all data
+```
 
-The `prod` profile builds optimized, non-root images and runs the full stack
-(nginx client, API, coordinator, workers, ingestion, Postgres, Redis, Redpanda)
-with restart policies, healthchecks and correct startup ordering
-(Postgres -> migrations -> Kafka topics -> services).
+## Production
 
-1. **Configure** `.env` (see [Deployment checklist](#deployment-checklist)).
-2. **Start all services:**
-   ```bash
-   docker compose --profile prod up -d --build
-   ```
-3. **Access the Application:**
-   - Client UI: `http://localhost` (port `CLIENT_PROD_HOST_PORT`, default 80)
-   - API: `http://localhost:8080`, also reachable same-origin at `/api/` through the client
+```bash
+docker compose --profile prod up -d --build
+```
 
-The browser only talks to the client's nginx; it proxies `/api/` (including the
-SSE event stream) to the API, so there is no hardcoded API URL and no CORS to
-configure. To host the API on a different origin, build the client with
-`VITE_API_URL` and set `CORS_ALLOWED_ORIGINS` on the API.
+Runs the optimized, non-root stack with healthchecks, restart policies and ordered startup (Postgres → migrations → Kafka topics → services). The client's nginx serves the UI and proxies `/api/` (including SSE) to the API, so there is no CORS or hard-coded API URL. For a separate API origin, build the client with `VITE_API_URL` and set `CORS_ALLOWED_ORIGINS`.
 
-> Building all images at once needs a few GB of RAM. On a small machine (or
-> Docker Desktop's default 3 GB VM) build one at a time:
-> `COMPOSE_PARALLEL_LIMIT=1 docker compose --profile prod build`
+> Building every image at once needs a few GB of RAM. On small machines use `COMPOSE_PARALLEL_LIMIT=1 docker compose --profile prod build`.
 
-**Rate limiting** is enforced by the client's nginx (`client/nginx.conf.template`), per client IP:
-login/register 5 per minute (burst 5), other `/api/` calls 10 per second (burst 30), and at most 30
-open connections (event streams). Over-limit requests get `429` with a JSON body. If you put a TLS
-proxy in front, configure nginx `set_real_ip_from` / `real_ip_header`, otherwise every visitor shares one limit.
+**Checklist**
 
-### Deployment checklist
+- `JWT_SECRET`: random, 32+ chars (`openssl rand -hex 32`); the API refuses to start in release mode otherwise.
+- Strong `POSTGRES_PASSWORD` and matching `DATABASE_URL` (percent-encode special characters).
+- Postgres, Redis, Kafka and the coordinator bind to `127.0.0.1` (`BIND_ADDRESS`); expose only the client (80) and API (8080).
+- Terminate TLS in front (see below) and back up the `postgres_data` volume.
+- Single-node Redpanda/Postgres/Redis run in containers; for HA point `DATABASE_URL`, `REDIS_URL` and `KAFKA_BROKERS` at managed services.
 
-- `JWT_SECRET`: random, 32+ chars (`openssl rand -hex 32`). The API refuses to start in release mode otherwise.
-- `POSTGRES_PASSWORD` and the matching `DATABASE_URL`: strong password (percent-encode special characters in the URL).
-- Postgres, Redis, Kafka and the coordinator only bind to `127.0.0.1` (`BIND_ADDRESS`). Leave it that way; only the client (80) and API (8080) are meant to be public.
-- Put a TLS-terminating reverse proxy / load balancer (Caddy, Traefik, cloud LB) in front of the client port, or put TLS on nginx.
-- Back up the `postgres_data` volume. `docker compose down -v` deletes it.
-- Single-node Redpanda, Postgres and Redis run in containers here; for HA use managed services and point `DATABASE_URL`, `REDIS_URL` and `KAFKA_BROKERS` at them.
+**Rate limiting** (client nginx, per IP): login/register 5/min (burst 5), other `/api/` 10/s (burst 30), max 30 open connections. Over-limit requests get `429`. Behind a proxy, set nginx `set_real_ip_from` / `real_ip_header` so visitors aren't pooled.
 
-### HTTPS and custom domains (Caddy)
+### HTTPS with Caddy
 
-One shared Caddy on the server terminates HTTPS (automatic Let's Encrypt certificates) and routes each
-subdomain to a project. It is **not** part of this app's compose file; it lives in `/opt/caddy` on the
-server (templates in `deploy/caddy/`), so many projects can share it.
+A shared Caddy (outside this compose file, templates in `deploy/caddy/`) terminates TLS with automatic Let's Encrypt certificates.
 
-1. DNS: add an `A` record for the subdomain (or a `*` wildcard) pointing at the server's IP.
-2. Open ports 80 and 443 on the server's firewall / cloud security group.
-3. In this project's server `.env` bind the app to localhost and pick a free port:
-   ```
-   CLIENT_PROD_BIND=127.0.0.1
-   CLIENT_PROD_HOST_PORT=8081
-   API_BIND=127.0.0.1
-   ```
-4. In `/opt/caddy/Caddyfile` add one block per project, then `docker exec caddy caddy reload --config /etc/caddy/Caddyfile`:
+1. Point a DNS `A` record at the server and open ports 80/443.
+2. In the server `.env`: `CLIENT_PROD_BIND=127.0.0.1`, `CLIENT_PROD_HOST_PORT=8081`, `API_BIND=127.0.0.1`.
+3. Add to the Caddyfile and reload (`docker exec caddy caddy reload --config /etc/caddy/Caddyfile`):
    ```
    backtesting.example.com {
        encode gzip
@@ -151,70 +116,17 @@ server (templates in `deploy/caddy/`), so many projects can share it.
    }
    ```
 
-The client's nginx trusts `X-Forwarded-For` from the Docker network only, so rate limits apply per real visitor.
-
 ## CI/CD
 
-Two GitHub Actions workflows live in `.github/workflows/`:
-
-| Workflow | Trigger | What it does |
+| Workflow | Trigger | Does |
 |---|---|---|
-| `ci.yml` | PRs and pushes to `main` | Backend tests, client lint/typecheck/build, then builds the prod images, boots the full prod stack and smoke-tests it |
-| `deploy.yml` | `ci.yml` succeeds on `main` (or manual run) | Builds and pushes the 5 prod images to GHCR, then deploys over SSH |
+| `ci.yml` | PRs, pushes to `main` | Backend tests, client lint/typecheck/build, builds prod images, boots the stack and smoke-tests it |
+| `deploy.yml` | `ci.yml` passes on `main` (or manual) | Pushes images to GHCR (`ghcr.io/<owner>/backtesting-<service>`), deploys over SSH |
 
-### One-time setup
+**Setup:** allow read/write workflow permissions; on the server create `/opt/backtesting/.env` (Docker + Compose plugin, a deploy user in the `docker` group); add repo secrets `DEPLOY_HOST` (unset = publish images only), `DEPLOY_USER`, `DEPLOY_PATH`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS` (`ssh-keyscan <host>`). Optionally add a `production` Environment with required reviewers.
 
-1. **Push to GitHub.** CI works with no configuration (it uses `.env.example`).
-2. **Registry:** nothing to configure; images are pushed to `ghcr.io/<owner>/backtesting-<service>` using the built-in `GITHUB_TOKEN`. In *Settings > Actions > General > Workflow permissions* allow read/write.
-3. **Server** (any Linux host with Docker + Compose plugin):
-   ```bash
-   mkdir -p /opt/backtesting && cd /opt/backtesting
-   # create .env here from .env.example with production values
-   ```
-   Create a dedicated deploy user in the `docker` group and an SSH key pair for it.
-4. **GitHub repo secrets** (*Settings > Secrets and variables > Actions*):
-
-   | Secret | Value |
-   |---|---|
-   | `DEPLOY_HOST` | server hostname/IP (leave unset to only publish images) |
-   | `DEPLOY_USER` | deploy user |
-   | `DEPLOY_PATH` | e.g. `/opt/backtesting` (holds `.env`) |
-   | `DEPLOY_SSH_KEY` | private key |
-   | `DEPLOY_KNOWN_HOSTS` | output of `ssh-keyscan <host>` |
-
-5. **Optional approval gate:** create a GitHub *Environment* named `production` with required reviewers; the deploy job waits for approval.
-6. Protect `main` and require the `CI Pipeline` checks before merging.
-
-On each deploy the server receives `docker-compose.yml` + `core/db/migrations`, pulls the images tagged with the commit SHA, runs migrations, and restarts changed services. Roll back by re-running the workflow on an older commit, or on the server:
+Each deploy copies `docker-compose.yml` and migrations, pulls SHA-tagged images, runs migrations and restarts changed services. Roll back by re-running the workflow on an older commit, or on the server:
 
 ```bash
 IMAGE_REGISTRY=ghcr.io/<owner>/ IMAGE_TAG=<old-sha> docker compose --profile prod up -d --no-build
-```
-
-### Testing
-
-You can run automated tests for both the backend and frontend using Docker Compose.
-
-**Run Backend Tests**
-Spins up the database, applies migrations, and executes all Go backend tests:
-```bash
-docker compose --profile test run --rm test
-```
-
-**Run Client Tests**
-Runs linting and builds the frontend client to verify correctness:
-```bash
-docker compose --profile test run --rm client-test
-```
-
-## Database Management
-
-**Generate a New Database Migration**
-```bash
-migrate create -ext sql -dir core/db/migrations -seq your_migration_name
-```
-
-**Reset the Database Completely (Wipes Data)**
-```bash
-docker compose down -v
 ```

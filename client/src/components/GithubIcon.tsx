@@ -11,4 +11,4 @@ export function GithubIcon({ className }: { className?: string }) {
   )
 }
 
-export const GITHUB_URL = 'https://github.com/Samirkhairati'
+export const GITHUB_URL = 'https://github.com/Samirkhairati/backtesting'
