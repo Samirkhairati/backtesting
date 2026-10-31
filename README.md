@@ -21,10 +21,14 @@ flowchart TD
     Client[Client · React] <-->|REST + SSE| API[API · Go/Gin]
     API --> Kafka[(Redpanda / Kafka)]
     Kafka <--> Coord[Coordinator · Go]
-    Kafka --> Ing[Ingestion workers · Python]
-    Kafka --> BT[Backtesting workers · Go]
-    API & Coord & Ing & BT --> DB[(PostgreSQL)]
-    Ing & BT --> Cache[(Redis)]
+    Kafka --> Ing1[Ingestion worker 1 · Python]
+    Kafka --> Ing2[Ingestion worker 2 · Python]
+    Kafka --> IngN[Ingestion worker N · Python]
+    Kafka --> BT1[Backtesting worker 1 · Go]
+    Kafka --> BT2[Backtesting worker 2 · Go]
+    Kafka --> BTN[Backtesting worker N · Go]
+    API & Coord & Ing1 & Ing2 & IngN & BT1 & BT2 & BTN --> DB[(PostgreSQL)]
+    Ing1 & Ing2 & IngN & BT1 & BT2 & BTN --> Cache[(Redis)]
 ```
 
 | Component | Role |
