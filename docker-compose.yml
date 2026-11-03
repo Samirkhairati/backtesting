@@ -109,6 +109,8 @@ services:
     image: ${IMAGE_REGISTRY:-}backtesting-worker:${IMAGE_TAG:-latest}
     profiles: ["prod"]
     restart: unless-stopped
+    deploy:
+      replicas: ${WORKER_REPLICAS:-1}
     env_file: .env
     environment:
       GIN_MODE: release
@@ -212,6 +214,8 @@ services:
     image: ${IMAGE_REGISTRY:-}backtesting-ingestion:${IMAGE_TAG:-latest}
     profiles: ["prod"]
     restart: unless-stopped
+    deploy:
+      replicas: ${INGESTION_REPLICAS:-1}
     env_file: .env
     depends_on:
       postgres:
