@@ -142,7 +142,7 @@ A shared Caddy (outside this compose file, templates in `deploy/caddy/`) termina
 | `ci.yml` | PRs, pushes to `main` | Backend tests, client lint/typecheck/build, builds prod images, boots the stack and smoke-tests it |
 | `deploy.yml` | `ci.yml` passes on `main` (or manual) | Pushes images to GHCR (`ghcr.io/<owner>/backtesting-<service>`), deploys over SSH |
 
-**Setup:** allow read/write workflow permissions; on the server create `/opt/backtesting/.env` (Docker + Compose plugin, a deploy user in the `docker` group); add repo secrets `DEPLOY_HOST` (unset = publish images only), `DEPLOY_USER`, `DEPLOY_PATH`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS` (`ssh-keyscan <host>`). To also deploy to a second server (the workflow targets `azure` and `oracle`), add the same set prefixed `DEPLOY_ORACLE_` (`DEPLOY_ORACLE_HOST`, `_USER`, `_PATH`, `_SSH_KEY`, `_KNOWN_HOSTS`). Images are built for amd64 and arm64. Optionally add a `production` Environment with required reviewers.
+**Setup:** allow read/write workflow permissions; on the server create `/opt/backtesting/.env` (Docker + Compose plugin, a deploy user in the `docker` group); add repo secrets `DEPLOY_ORACLE_HOST` (unset = publish images only), `DEPLOY_ORACLE_USER`, `DEPLOY_ORACLE_PATH`, `DEPLOY_ORACLE_SSH_KEY`, `DEPLOY_ORACLE_KNOWN_HOSTS` (`ssh-keyscan <host>`). Images are built for arm64 only (the server is an Ampere VM) on GitHub's native arm runners. Optionally add a `production` Environment with required reviewers.
 
 Each deploy copies `docker-compose.yml` and migrations, pulls SHA-tagged images, runs migrations and restarts changed services. Roll back by re-running the workflow on an older commit, or on the server:
 

@@ -21,7 +21,8 @@ jobs:
   publish:
     name: Build and push ${{ matrix.name }}
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
-    runs-on: ubuntu-latest
+    # Native arm64 runner: the server is arm64, so no QEMU emulation is needed
+    runs-on: ubuntu-24.04-arm
     strategy:
       fail-fast: true
       matrix:
@@ -42,9 +43,6 @@ jobs:
           owner="${GITHUB_REPOSITORY_OWNER,,}"
           echo "ref=ghcr.io/${owner}/backtesting-${{ matrix.name }}" >> "$GITHUB_OUTPUT"
 
-      # Servers are a mix of amd64 (Azure) and arm64 (Oracle Ampere)
-      - uses: docker/setup-qemu-action@v3
-
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
@@ -58,7 +56,7 @@ jobs:
           context: ${{ matrix.context }}
           file: ${{ matrix.file }}
           target: prod
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/arm64
           build-args: ${{ matrix.build_args }}
           push: true
           tags: |
@@ -68,20 +66,13 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
 
   deploy:
-    name: Deploy to ${{ matrix.target }}
+    name: Deploy to server
     needs: publish
     runs-on: ubuntu-latest
     # Create a GitHub "production" environment to add required reviewers
     environment: production
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # secret_prefix selects the secret set: DEPLOY_* (azure), DEPLOY_ORACLE_* (oracle)
-          - { target: azure,  secret_prefix: DEPLOY }
-          - { target: oracle, secret_prefix: DEPLOY_ORACLE }
     env:
-      DEPLOY_HOST: ${{ secrets[format('{0}_HOST', matrix.secret_prefix)] }}
+      DEPLOY_HOST: ${{ secrets.DEPLOY_ORACLE_HOST }}
     steps:
       - uses: actions/checkout@v4
         if: env.DEPLOY_HOST != ''
@@ -91,10 +82,10 @@ jobs:
       - name: Deploy over SSH
         if: env.DEPLOY_HOST != ''
         env:
-          DEPLOY_USER: ${{ secrets[format('{0}_USER', matrix.secret_prefix)] }}
-          DEPLOY_PATH: ${{ secrets[format('{0}_PATH', matrix.secret_prefix)] }}
-          DEPLOY_SSH_KEY: ${{ secrets[format('{0}_SSH_KEY', matrix.secret_prefix)] }}
-          DEPLOY_KNOWN_HOSTS: ${{ secrets[format('{0}_KNOWN_HOSTS', matrix.secret_prefix)] }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_ORACLE_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_ORACLE_PATH }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_ORACLE_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_ORACLE_KNOWN_HOSTS }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           IMAGE_TAG: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
@@ -129,4 +120,4 @@ jobs:
 
       - name: Skipped
         if: env.DEPLOY_HOST == ''
-        run: echo "${{ matrix.secret_prefix }}_HOST secret not set - images were pushed to GHCR but nothing was deployed."
+        run: echo "DEPLOY_ORACLE_HOST secret not set - images were pushed to GHCR but nothing was deployed."
