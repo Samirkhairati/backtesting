@@ -42,6 +42,9 @@ jobs:
           owner="${GITHUB_REPOSITORY_OWNER,,}"
           echo "ref=ghcr.io/${owner}/backtesting-${{ matrix.name }}" >> "$GITHUB_OUTPUT"
 
+      # Servers are a mix of amd64 (Azure) and arm64 (Oracle Ampere)
+      - uses: docker/setup-qemu-action@v3
+
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
@@ -55,6 +58,7 @@ jobs:
           context: ${{ matrix.context }}
           file: ${{ matrix.file }}
           target: prod
+          platforms: linux/amd64,linux/arm64
           build-args: ${{ matrix.build_args }}
           push: true
           tags: |
@@ -80,10 +84,10 @@ jobs:
       - name: Deploy over SSH
         if: env.DEPLOY_HOST != ''
         env:
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_USER: ${{ secrets[format('{0}_USER', matrix.secret_prefix)] }}
+          DEPLOY_PATH: ${{ secrets[format('{0}_PATH', matrix.secret_prefix)] }}
+          DEPLOY_SSH_KEY: ${{ secrets[format('{0}_SSH_KEY', matrix.secret_prefix)] }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets[format('{0}_KNOWN_HOSTS', matrix.secret_prefix)] }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           IMAGE_TAG: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
@@ -118,4 +122,4 @@ jobs:
 
       - name: Skipped
         if: env.DEPLOY_HOST == ''
-        run: echo "DEPLOY_HOST secret not set - images were pushed to GHCR but nothing was deployed."
+        run: echo "${{ matrix.secret_prefix }}_HOST secret not set - images were pushed to GHCR but nothing was deployed."
