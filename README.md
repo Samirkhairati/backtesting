@@ -2,6 +2,7 @@
 
 A distributed algorithmic-trading backtesting platform. Pick a universe of symbols (NASDAQ 100, S&P 500 or a custom list), a date range and one or more strategies; the system ingests the historical data, runs every symbol/strategy pair in parallel and aggregates the results into a live dashboard with equity curves, metrics and per-stage timings.
 
+<img width="524" height="728" alt="ScreenRecording2026-11-03at11 23 00-ezgif com-video-to-gif-converter" src="https://github.com/user-attachments/assets/5fcea163-f5df-4c31-b5ed-f35cd0836e56" />
 <img width="1405" height="884" alt="Dashboard" src="https://github.com/user-attachments/assets/b06e93d7-1dbe-4930-ac5f-46e2733657e2" />
 <img width="1428" height="1071" alt="Experiment results" src="https://github.com/user-attachments/assets/6080325d-85b1-48a2-b2b8-e37bbd5b42b1" />
 
