@@ -68,13 +68,20 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
 
   deploy:
-    name: Deploy to server
+    name: Deploy to ${{ matrix.target }}
     needs: publish
     runs-on: ubuntu-latest
     # Create a GitHub "production" environment to add required reviewers
     environment: production
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # secret_prefix selects the secret set: DEPLOY_* (azure), DEPLOY_ORACLE_* (oracle)
+          - { target: azure,  secret_prefix: DEPLOY }
+          - { target: oracle, secret_prefix: DEPLOY_ORACLE }
     env:
-      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_HOST: ${{ secrets[format('{0}_HOST', matrix.secret_prefix)] }}
     steps:
       - uses: actions/checkout@v4
         if: env.DEPLOY_HOST != ''
