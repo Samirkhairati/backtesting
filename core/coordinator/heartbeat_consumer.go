@@ -42,7 +42,7 @@ func (hc *HeartbeatConsumer) handle(ctx context.Context, record *kgo.Record) err
 		return nil // Do not retry malformed messages
 	}
 
-	if err := hc.Repo.UpsertWorkerHeartbeat(ctx, msg.WorkerID, msg.Status); err != nil {
+	if err := hc.Repo.UpsertWorkerHeartbeat(ctx, msg.WorkerID, msg.Status, msg.Kind); err != nil {
 		logger.Log.Error("Failed to upsert worker heartbeat", zap.Error(err), zap.String("worker_id", msg.WorkerID))
 		return err
 	}

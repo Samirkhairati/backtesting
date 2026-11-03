@@ -209,13 +209,16 @@ func (r *ExperimentRepository) UpdateExperimentResults(ctx context.Context, expe
 	return err
 }
 
-func (r *ExperimentRepository) UpsertWorkerHeartbeat(ctx context.Context, workerID string, status string) error {
+func (r *ExperimentRepository) UpsertWorkerHeartbeat(ctx context.Context, workerID string, status string, kind string) error {
+	if kind == "" {
+		kind = "backtesting"
+	}
 	_, err := r.DB.Exec(ctx, `
-		INSERT INTO workers (id, status, last_heartbeat) 
-		VALUES ($1, $2, CURRENT_TIMESTAMP)
+		INSERT INTO workers (id, status, kind, last_heartbeat) 
+		VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
 		ON CONFLICT (id) DO UPDATE 
-		SET last_heartbeat = CURRENT_TIMESTAMP, status = $2
-	`, workerID, status)
+		SET last_heartbeat = CURRENT_TIMESTAMP, status = $2, kind = $3
+	`, workerID, status, kind)
 	return err
 }
 
@@ -312,10 +315,10 @@ func (r *ExperimentRepository) ClaimIngestionJob(ctx context.Context, jobID stri
 	// Upsert the worker first so the FK constraint on ingestion_jobs.worker_id is satisfied
 	// even if the heartbeat hasn't arrived yet.
 	_, err := r.DB.Exec(ctx, `
-		INSERT INTO workers (id, status, last_heartbeat)
-		VALUES ($1, 'ACTIVE', CURRENT_TIMESTAMP)
+		INSERT INTO workers (id, status, kind, last_heartbeat)
+		VALUES ($1, 'ACTIVE', 'ingestion', CURRENT_TIMESTAMP)
 		ON CONFLICT (id) DO UPDATE
-		SET last_heartbeat = CURRENT_TIMESTAMP, status = 'ACTIVE'
+		SET last_heartbeat = CURRENT_TIMESTAMP, status = 'ACTIVE', kind = 'ingestion'
 	`, workerID)
 	if err != nil {
 		return fmt.Errorf("ClaimIngestionJob: failed to upsert worker: %w", err)

@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { StopCircle } from 'lucide-react'
 import { StageTimeline } from './StageTimeline'
+import { PipelineDiagram } from './PipelineDiagram'
 
 interface CancelContext {
   previousDetail: Experiment | undefined
@@ -335,6 +336,8 @@ export function ExperimentDetails({ experimentId }: { experimentId: string }) {
         )}
 
         <StageTimeline experiment={exp} />
+
+        <PipelineDiagram experiment={exp} />
       </CardContent>
     </Card>
   );

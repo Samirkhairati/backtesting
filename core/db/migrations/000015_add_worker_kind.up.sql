@@ -1,0 +1,2 @@
+ALTER TABLE workers
+ADD COLUMN kind VARCHAR(20) NOT NULL DEFAULT 'backtesting';

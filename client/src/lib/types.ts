@@ -87,3 +87,9 @@ export interface SymbolInfo {
   symbol: string
   name: string
 }
+
+/** Workers currently alive (recent heartbeat), by kind. */
+export interface WorkerCounts {
+  ingestion: number
+  backtesting: number
+}

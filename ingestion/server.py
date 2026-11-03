@@ -26,6 +26,7 @@ def heartbeat_loop(producer):
             heartbeat = {
                 "worker_id": WORKER_ID,
                 "status": "ACTIVE",
+                "kind": "ingestion",
                 "timestamp": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
             }
             producer.send('worker-heartbeats', heartbeat)

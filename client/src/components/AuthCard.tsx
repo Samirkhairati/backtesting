@@ -93,6 +93,8 @@ function useAuthSubmit() {
   return { isLoading, errorMsg, run }
 }
 
+const DEMO_CREDENTIALS = { username: 'test', password: 'test' }
+
 function LoginForm() {
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -105,6 +107,21 @@ function LoginForm() {
       () => login({ username: values.username, password: values.password }),
       'Login failed: No token received',
     )
+
+  // Log in as the shared demo user, creating the account the first time.
+  const loginAsDemo = () =>
+    run(async () => {
+      try {
+        return await login(DEMO_CREDENTIALS)
+      } catch {
+        try {
+          await register(DEMO_CREDENTIALS)
+        } catch {
+          // Registration can fail if the account already exists (e.g. a race); retry the login anyway.
+        }
+        return login(DEMO_CREDENTIALS)
+      }
+    }, 'Login failed: No token received')
 
   return (
     <Form {...form}>
@@ -138,6 +155,15 @@ function LoginForm() {
         <div className="pt-2">
           <Button type="submit" disabled={isLoading} className="w-full font-mono uppercase tracking-widest">
             {isLoading ? <Spinner label="Authenticating..." /> : 'Login'}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isLoading}
+            onClick={loginAsDemo}
+            className="mt-3 w-full font-mono uppercase tracking-widest"
+          >
+            Log in as demo user
           </Button>
         </div>
         <ErrorMessage message={errorMsg} />

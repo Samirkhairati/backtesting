@@ -49,6 +49,7 @@ func SetupRouter(db *pgxpool.Pool, coordinatorClient pb.CoordinatorServiceClient
 		CoordinatorClient: coordinatorClient,
 	}
 	dataHandler := &handlers.DataHandler{DB: db}
+	workerHandler := &handlers.WorkerHandler{DB: db}
 	eventHandler := &handlers.EventHandler{Bus: bus}
 
 	// v1 API Routes
@@ -70,6 +71,12 @@ func SetupRouter(db *pgxpool.Pool, coordinatorClient pb.CoordinatorServiceClient
 			experiments.GET("/:id", experimentHandler.GetExperimentByID)
 			experiments.POST("/:id/cancel", experimentHandler.CancelExperiment)
 			experiments.GET("/:id/events", eventHandler.StreamEvents)
+		}
+
+		workers := v1.Group("/workers")
+		workers.Use(middleware.RequireAuth())
+		{
+			workers.GET("", workerHandler.GetWorkers)
 		}
 
 		data := v1.Group("/data")

@@ -59,6 +59,7 @@ func (w *Worker) heartbeatLoop(ctx context.Context) {
 				WorkerID:  w.ID,
 				Timestamp: time.Now(),
 				Status:    "ACTIVE",
+				Kind:      "backtesting",
 			}
 			if err := w.Producer.Publish(ctx, "worker-heartbeats", w.ID, hb); err != nil {
 				logger.Log.Error("Failed to publish heartbeat", zap.Error(err))

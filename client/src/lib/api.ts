@@ -1,4 +1,4 @@
-import type { Experiment, ExperimentEvent, ExperimentsResponse, SymbolInfo } from "./types";
+import type { Experiment, ExperimentEvent, ExperimentsResponse, SymbolInfo, WorkerCounts } from "./types";
 import { recordServerTime } from "./useServerClock";
 
 // Same-origin by default: nginx (prod) and the Vite dev server both proxy /api to the API.
@@ -37,6 +37,17 @@ export async function fetchExperimentById(id: string): Promise<Experiment> {
   const data = (await res.json()) as Experiment;
   recordServerTime(data.server_time);
   return data;
+}
+
+export async function fetchWorkers(): Promise<WorkerCounts> {
+  const res = await fetch(`${API_URL}/workers`, {
+    headers: getHeaders(),
+  });
+  if (!res.ok) {
+    if (res.status === 401) throw new Error("Unauthorized");
+    throw new Error("Failed to fetch workers");
+  }
+  return res.json();
 }
 
 export async function fetchSymbols(): Promise<SymbolInfo[]> {

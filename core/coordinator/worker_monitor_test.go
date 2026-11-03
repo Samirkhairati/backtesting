@@ -39,7 +39,7 @@ func TestWorkerHeartbeatAndRequeue(t *testing.T) {
 	workerID := uuid.New().String()
 
 	// 3. Upsert heartbeat (worker is alive)
-	err = repo.UpsertWorkerHeartbeat(ctx, workerID, "ACTIVE")
+	err = repo.UpsertWorkerHeartbeat(ctx, workerID, "ACTIVE", "backtesting")
 	require.NoError(t, err)
 
 	// 4. Worker claims job
@@ -108,7 +108,7 @@ func TestIngestionWorkerHeartbeatAndRequeue(t *testing.T) {
 	workerID := uuid.New().String()
 
 	// 3. Upsert heartbeat (worker is alive)
-	err = repo.UpsertWorkerHeartbeat(ctx, workerID, "ACTIVE")
+	err = repo.UpsertWorkerHeartbeat(ctx, workerID, "ACTIVE", "backtesting")
 	require.NoError(t, err)
 
 	// 4. Worker claims job
